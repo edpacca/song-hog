@@ -1,0 +1,10 @@
+[project]
+name = "song-hog"
+version = "0.1.0"
+description = "Identify and chop songs out from long recordings"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "ffmpeg-python>=0.2.0",
+    "requests>=2.32.5",
+]
