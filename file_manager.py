@@ -1,6 +1,5 @@
 import requests
-import ffmpeg
-from pathlib import Path
+import os
 
 google_url_base = "https://recorder.google.com/"
 download_url_base = "https://pixelrecorder-pa.googleapis.com/download/playback/"
@@ -19,24 +18,59 @@ def download_file(url: str, destination: str):
     download_url = f"{download_url_base}{file_id}"
 
     session = requests.Session()
-    response = session.get(download_url, stream=True)
+    response = session.get(
+        download_url,
+        stream=True,
+        timeout=(10, 60)
+    )
 
     response.raise_for_status()
     cd = response.headers.get("Content-Disposition", "")
-    print(cd)
     file_name = cd.split("filename=")[1].replace("\"", "")
     destination_path = f"{destination}/{file_name}"
+
+    content_range = response.headers.get("Content-Range", "")
+    total_size = (
+        int(content_range.split("/")[1])
+        if "/" in content_range
+        else int(response.headers["Content-Length"])
+    )
+
+    print(total_size)
+
+    expected_size = int(response.headers.get("Content-Length", 0))
+    received = 0
+
     with open(destination_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=32768):
-            f.write(chunk)
+        while received < total_size:
+            print(f"Fetching bytes {received}-{total_size - 1} ({received / total_size:.1%} done)...")
+            response = session.get(
+                download_url,
+                headers={"Range": f"bytes={received}-"},
+                stream=True,
+                timeout=(10, 60),
+            )
+            response.raise_for_status()
 
-    print(f"saved to {destination_path}")
+            chunk_received = 0
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+                    received += len(chunk)
+                    chunk_received += len(chunk)
 
-def convert_mp4_to_wav(mp4_path, file_name, output_dir):
-    input_path = Path(__file__).parent / mp4_path
-    output_path = Path(__file__).parent / output_dir / f"{file_name}.wav"
-    print(input_path)
-    ffmpeg.input(str(input_path)).output(str(output_path), ac=1, ar=16000).run()
+            if chunk_received == 0:
+                raise RuntimeError(f"Server returned no data at offset {received}")
+
+    actual_size = os.path.getsize(destination_path)
+    if expected_size and actual_size < expected_size:
+        raise RuntimeError(
+            f"Incomplete download: got {actual_size} of {expected_size} bytes "
+            f"({actual_size / expected_size:.1%})"
+        )
+
+    print(f"Saved to {destination_path} ({actual_size / 1024 / 1024:.1f} MB)")
+    return destination_path
 
 def main():
     pass
