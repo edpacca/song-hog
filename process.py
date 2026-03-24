@@ -1,7 +1,11 @@
+from typing import List, Tuple
+
+import numpy as np
+
 def smooth_signal(intensity_db, window):
     return np.convolve(intensity_db, np.ones(window)/window, mode='same')
 
-def detect_segments(smoothed, t, threshold, min_duration, padding=0):
+def detect_segments(smoothed, t, threshold, min_duration, min_gap, padding=0):
     dt = t[1] - t[0]
     min_bins = int(min_duration / dt)
     is_music = smoothed > threshold
@@ -24,7 +28,7 @@ def detect_segments(smoothed, t, threshold, min_duration, padding=0):
     if padding > 0:
         segments = pad_segments(segments, padding, t[-1])
 
-    return merge_segments(segments)
+    return merge_segments(segments, min_gap)
 
 def pad_segments(segments, padding, max_time):
     return [
@@ -32,18 +36,16 @@ def pad_segments(segments, padding, max_time):
         for start, end in segments
     ]
 
-def merge_segments(segments):
+def merge_segments(segments, min_gap) -> List[Tuple[int, int]]:
     if not segments:
         return []
 
     merged = [segments[0]]
     for start, end in segments[1:]:
         prev_start, prev_end = merged[-1]
-        if start <= prev_end:
+        if start <= prev_end + min_gap:
             merged[-1] = (prev_start, max(prev_end, end))
         else:
             merged.append((start, end))
 
     return merged
-
-
