@@ -1,8 +1,11 @@
+import logging
 import os
 import re
 from dataclasses import dataclass
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 from file_loader import _validation
 
@@ -69,7 +72,7 @@ class Downloader:
         """
         self.validate_url(url)
         file_id = self.extract_id(url)
-        print(f"file id: {file_id}")
+        logger.info("file id: %s", file_id)
 
         download_url = self._build_download_url(file_id)
 
@@ -81,13 +84,13 @@ class Downloader:
             total_size = self._parse_total_size(initial_response)
             expected_size = int(initial_response.headers.get("Content-Length", 0))
 
-        print(f"Total size: {total_size / 1024 / 1024:.1f} MB")
+        logger.info("Total size: %.1f MB", total_size / 1024 / 1024)
 
         self._stream_to_file(session, download_url, destination_path, total_size)
         self._verify_download(destination_path, expected_size)
 
         actual_size = os.path.getsize(destination_path)
-        print(f"Saved to {destination_path} ({actual_size / 1024 / 1024:.1f} MB)")
+        logger.info("Saved to %s (%.1f MB)", destination_path, actual_size / 1024 / 1024)
         return destination_path
 
     # -- Private helpers ------------------------------------------------------
@@ -152,7 +155,7 @@ class Downloader:
         Returns the number of bytes written in this fetch.
         Raises RuntimeError if the server returns no data.
         """
-        print(f"Fetching bytes {received}-{total_size - 1} ({received / total_size:.1%} done)...")
+        logger.info("Fetching bytes %d-%d (%.1f%% done)...", received, total_size - 1, received / total_size * 100)
         response = self._make_streaming_get(
             session,
             download_url,
