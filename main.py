@@ -23,7 +23,7 @@ class FileSessionData:
 def test_get_file_paths(media_dir, download: False):
     if download:
         init_m4a_file_path, init_file_name = test_download(media_dir)
-        wav_path = file_converter.convert_m4a_to_wav(init_m4a_file_path, media_dir)
+        wav_path = file_converter.convert_m4a_to_mono_wav(init_m4a_file_path, media_dir)
     else:
         init_file_name = os.getenv("TEST_FILE_NAME")
         init_m4a_file_path = str(
