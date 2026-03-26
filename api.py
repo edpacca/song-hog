@@ -1,19 +1,19 @@
 import json
 import os
-import re
 import uuid
 import matplotlib
 matplotlib.use("Agg")  # headless, no display required
 
-import numpy as np
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import file_converter
 import file_loader
 import plot
+import process
 from auth import get_api_key
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", str(Path(__file__).parent / "media")))
@@ -23,10 +23,17 @@ SAMPLE_RATE = 16000
 app = FastAPI(title="Song Hog API")
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Unexpected server error: {type(exc).__name__}: {exc}"},
+    )
+
+
 @app.get("/health")
 def health():
-    if not MEDIA_DIR.exists():
-        raise HTTPException(status_code=503, detail="Media directory unavailable")
+    _check_media_dir()
     return {"status": "ok", "media_dir": str(MEDIA_DIR), "queue_dir": str(QUEUE_DIR)}
 
 
@@ -44,6 +51,18 @@ class IdRequest(BaseModel):
     file_id: str
 
 
+def _check_media_dir() -> None:
+    """Raise 503 if MEDIA_DIR is absent or not writable."""
+    if not MEDIA_DIR.is_dir():
+        raise HTTPException(status_code=503, detail="Media directory unavailable")
+    probe = MEDIA_DIR / f".write_probe_{uuid.uuid4().hex}"
+    try:
+        probe.touch()
+        probe.unlink()
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"Media directory not writable: {exc}")
+
+
 def _enqueue(session_name: str, folder_path: Path) -> None:
     pending = QUEUE_DIR / "pending"
     pending.mkdir(parents=True, exist_ok=True)
@@ -59,16 +78,34 @@ def _enqueue(session_name: str, folder_path: Path) -> None:
 
 def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     outdir = MEDIA_DIR / session_name
-    outdir.mkdir(parents=True, exist_ok=True)
+    try:
+        outdir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"Cannot create session directory: {exc}")
 
-    # output_dir is relative to the project root (file_converter prepends __file__.parent)
-    file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, f"media/{session_name}")
-    wav_path = outdir / f"{session_name}.wav"
+    try:
+        # output_dir is relative to the project root (file_converter prepends __file__.parent)
+        wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
+        data = file_converter.read_16bit_to_float(str(wav_path))
+        analysis = process.analyze(data, SAMPLE_RATE)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Audio conversion failed: {exc}")
 
-    data = file_converter.read_16bit_to_float(str(wav_path))
-    segments = plot.plot_data(data, SAMPLE_RATE, session_name, str(outdir))
+    try:
+        plot.plot_data(analysis, data, session_name, str(outdir), export=True, show=False)
+        segments = analysis.segments
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Audio analysis/plotting failed: {exc}")
 
-    _enqueue(session_name, outdir)
+    try:
+        file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
+
+    try:
+        _enqueue(session_name, outdir)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to enqueue job: {exc}")
 
     return ProcessResponse(
         file_name=session_name,
@@ -77,33 +114,30 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     )
 
 
-@app.post("/process/url", response_model=ProcessResponse)
-def process_url(body: UrlRequest, _: str = Depends(get_api_key)):
-    """Download and process a recording by Google Recorder URL."""
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+def _download_and_pipeline(url: str) -> ProcessResponse:
+    """Download an M4A from `url` into MEDIA_DIR and run the processing pipeline."""
+    _check_media_dir()
     try:
-        downloaded = file_loader.download_file(body.url, str(MEDIA_DIR))
+        downloaded = file_loader.download_file(url, str(MEDIA_DIR))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Download failed: {exc}")
 
     m4a_path = Path(downloaded)
     session_name = m4a_path.stem.replace(" ", "_")
     return _run_pipeline(m4a_path, session_name)
+
+
+@app.post("/process/url", response_model=ProcessResponse)
+def process_url(body: UrlRequest, _: str = Depends(get_api_key)):
+    """Download and process a recording by Google Recorder URL."""
+    return _download_and_pipeline(body.url)
 
 
 @app.post("/process/id", response_model=ProcessResponse)
 def process_id(body: IdRequest, _: str = Depends(get_api_key)):
     """Download and process a recording by Google Recorder file ID."""
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     google_url = f"{file_loader.google_url_base}{body.file_id}"
-    try:
-        downloaded = file_loader.download_file(google_url, str(MEDIA_DIR))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Download failed: {exc}")
-
-    m4a_path = Path(downloaded)
-    session_name = m4a_path.stem.replace(" ", "_")
-    return _run_pipeline(m4a_path, session_name)
+    return _download_and_pipeline(google_url)
 
 
 @app.post("/process/upload", response_model=ProcessResponse)
@@ -115,11 +149,14 @@ async def process_upload(
     if not file.filename or not file.filename.lower().endswith(".m4a"):
         raise HTTPException(status_code=400, detail="Only .m4a files are accepted")
 
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    _check_media_dir()
     stem = Path(file.filename).stem.replace(" ", "_")
     m4a_path = MEDIA_DIR / f"{stem}_{uuid.uuid4().hex[:8]}.m4a"
 
-    content = await file.read()
-    m4a_path.write_bytes(content)
+    try:
+        content = await file.read()
+        m4a_path.write_bytes(content)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {exc}")
 
     return _run_pipeline(m4a_path, stem)
