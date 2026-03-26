@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 import wave
 import struct
@@ -10,14 +11,15 @@ def normalise_16bit(data):
     return [ abs(float(value) / pow(2, 15)) for value in data ]
 
 def read_16bit_to_float(path):
+    logging.info(f"Reading file: {path}")
     wave_read = wave.open(path)
     frames = wave_read.getnframes()
     chunks = wave_read.readframes(frames)
     channels = wave_read.getnchannels()
     return struct.unpack("%ih" % (frames * channels), chunks)
 
-def convert_mp4_to_wav(mp4_path, file_name, output_dir):
-    input_path = Path(__file__).parent / mp4_path
+def convert_m4a_to_wav(m4a_path, file_name, output_dir):
+    input_path = Path(__file__).parent / m4a_path
     output_path = Path(__file__).parent / output_dir / f"{file_name}.wav"
     print(input_path)
     ffmpeg.input(str(input_path)).output(str(output_path), ac=1, ar=16000).run(quiet=True)

@@ -13,3 +13,4 @@ wheels/
 **/*.m4a
 **/*.mp3
 **/*.png
+.env
