@@ -12,77 +12,65 @@ from file_loader._validation import (
 )
 from file_loader.downloader import GOOGLE_RECORDER
 
+_BASE = GOOGLE_RECORDER.input_url_base
+
 
 class TestExtractFileId(unittest.TestCase):
 
-    def test_basic_url(self):
-        url = "https://recorder.google.com/abc123"
-        self.assertEqual(extract_file_id(GOOGLE_RECORDER.input_url_base, url), "abc123")
+    _VALID_CASES = [
+        ("https://recorder.google.com/abc123", "abc123"),
+        ("https://recorder.google.com/abc123?authuser=1", "abc123"),
+        ("https://recorder.google.com/abc123?authuser=1&foo=bar", "abc123"),
+        ("https://recorder.google.com/66bab67a-62193-4368-1031a-3d91717acaa3",
+         "66bab67a-62193-4368-1031a-3d91717acaa3"),
+    ]
 
-    def test_url_with_query_param(self):
-        url = "https://recorder.google.com/abc123?authuser=1"
-        self.assertEqual(extract_file_id(GOOGLE_RECORDER.input_url_base, url), "abc123")
+    _INVALID_URLS = [
+        # Wrong base
+        "https://example.com/somefile",
+        "",
+        # ID allowlist enforcement
+        "https://recorder.google.com/abc%2Fdef",   # percent-encoded slash
+        "https://recorder.google.com/abc%252Fdef",  # double-encoded slash
+        "https://recorder.google.com/abc.def",      # dot
+        "https://recorder.google.com/abc def",      # space
+    ]
 
-    def test_url_with_multiple_query_params(self):
-        url = "https://recorder.google.com/abc123?authuser=1&foo=bar"
-        self.assertEqual(extract_file_id(GOOGLE_RECORDER.input_url_base, url), "abc123")
+    def test_extracts_id(self):
+        for url, expected in self._VALID_CASES:
+            with self.subTest(url=url):
+                self.assertEqual(extract_file_id(_BASE, url), expected)
 
-    def test_real_looking_uuid(self):
-        url = "https://recorder.google.com/66bab67a-62193-4368-1031a-3d91717acaa3"
-        self.assertEqual(
-            extract_file_id(GOOGLE_RECORDER.input_url_base, url),
-            "66bab67a-62193-4368-1031a-3d91717acaa3",
-        )
+    def test_invalid_urls_raise(self):
+        for url in self._INVALID_URLS:
+            with self.subTest(url=url):
+                with self.assertRaises(ValueError):
+                    extract_file_id(_BASE, url)
 
-    def test_url_missing_base_raises(self):
+    def test_error_message_is_generic(self):
         with self.assertRaises(ValueError) as ctx:
-            extract_file_id(GOOGLE_RECORDER.input_url_base, "https://example.com/somefile")
+            extract_file_id(_BASE, "https://example.com/somefile")
         self.assertEqual(str(ctx.exception), _INVALID_URL_ERROR)
-
-    def test_empty_string_raises(self):
-        with self.assertRaises(ValueError):
-            extract_file_id(GOOGLE_RECORDER.input_url_base, "")
-
-    # ID allowlist enforcement
-    def test_percent_encoded_slash_rejected(self):
-        url = "https://recorder.google.com/abc%2Fdef"
-        with self.assertRaises(ValueError):
-            extract_file_id(GOOGLE_RECORDER.input_url_base, url)
-
-    def test_double_encoded_slash_rejected(self):
-        url = "https://recorder.google.com/abc%252Fdef"
-        with self.assertRaises(ValueError):
-            extract_file_id(GOOGLE_RECORDER.input_url_base, url)
-
-    def test_dot_in_id_rejected(self):
-        url = "https://recorder.google.com/abc.def"
-        with self.assertRaises(ValueError):
-            extract_file_id(GOOGLE_RECORDER.input_url_base, url)
-
-    def test_space_in_id_rejected(self):
-        url = "https://recorder.google.com/abc def"
-        with self.assertRaises(ValueError):
-            extract_file_id(GOOGLE_RECORDER.input_url_base, url)
 
 
 class TestSanitizeFilename(unittest.TestCase):
 
-    def test_clean_name_unchanged(self):
-        self.assertEqual(sanitize_filename("my_recording.m4a"), "my_recording.m4a")
+    _EXACT_TRANSFORMS = [
+        ("my_recording.m4a", "my_recording.m4a"),   # clean name unchanged
+        ("my recording.m4a", "my_recording.m4a"),   # spaces replaced
+        ("../../evil.m4a", "evil.m4a"),              # path traversal stripped
+        ("my-recording.m4a", "my-recording.m4a"),   # hyphens preserved
+    ]
 
-    def test_spaces_replaced(self):
-        self.assertEqual(sanitize_filename("my recording.m4a"), "my_recording.m4a")
-
-    def test_path_traversal_stripped(self):
-        self.assertEqual(sanitize_filename("../../evil.m4a"), "evil.m4a")
+    def test_exact_transforms(self):
+        for name, expected in self._EXACT_TRANSFORMS:
+            with self.subTest(name=name):
+                self.assertEqual(sanitize_filename(name), expected)
 
     def test_special_chars_replaced(self):
         result = sanitize_filename("band rehearsal (2024).m4a")
         self.assertNotIn("(", result)
         self.assertNotIn(")", result)
-
-    def test_hyphens_preserved(self):
-        self.assertEqual(sanitize_filename("my-recording.m4a"), "my-recording.m4a")
 
     def test_unicode_replaced(self):
         result = sanitize_filename("café.m4a")
