@@ -9,6 +9,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class AnalysisParams:
+    window: int = 400
+    threshold: float = 35
+    min_duration: float = 40
+    min_gap: float = 20
+    padding: float = 5
+    def __repr__(self) -> str:
+        return f"w={self.window}__th={self.threshold}__md={self.min_duration}__mg={self.min_gap}__p={self.padding}"
+
+    def __str__(self) -> str:
+        return f"window={self.window} threshold={self.threshold}db min_duration={self.min_duration}s min_gap={self.min_gap}s padding={self.padding}s"
+
+
+@dataclass
 class AudioAnalysis:
     spectrum: np.ndarray  # linear power, shape (freqs, time_bins)
     freqs: np.ndarray
@@ -17,8 +31,8 @@ class AudioAnalysis:
     smoothed: np.ndarray
     segments: List[Tuple[float, float]]
     sample_rate: int
-    params_str: str
-    params_full_str: str
+    params: AnalysisParams
+
 
 def compute_spectrogram(
     data: np.ndarray,
@@ -35,13 +49,11 @@ def compute_spectrogram(
 def analyze(
     data: np.ndarray,
     sample_rate: int,
-    window: int = 400,
-    threshold: float = 35,
-    min_duration: float = 40,
-    min_gap: float = 20,
-    padding: float = 5,
+    params: AnalysisParams = None,
 ) -> AudioAnalysis:
-    logger.info(f"Analysing  window={window}  threshold={threshold}dB  min_duration={min_duration}s  min_gap={min_gap}s  padding={padding}s")
+    if params is None:
+        params = AnalysisParams()
+    logger.info(f"Analysing  window={params.window}  threshold={params.threshold}dB  min_duration={params.min_duration}s  min_gap={params.min_gap}s  padding={params.padding}s")
     spectrum, freqs, t = compute_spectrogram(data, sample_rate)
 
     avg_intensity = spectrum.mean(axis=0)
@@ -49,8 +61,8 @@ def analyze(
     avg_intensity_db = 10 * np.log10(avg_intensity)
     avg_intensity_db[avg_intensity_db < 0] = 0
 
-    smoothed = smooth_signal(avg_intensity_db, window)
-    segments = detect_segments(smoothed, t, threshold, min_duration, min_gap, padding)
+    smoothed = smooth_signal(avg_intensity_db, params.window)
+    segments = detect_segments(smoothed, t, params.threshold, params.min_duration, params.min_gap, params.padding)
 
     logger.info(f"Analysis complete — {len(segments)} segment(s) found")
     return AudioAnalysis(
@@ -61,8 +73,7 @@ def analyze(
         smoothed=smoothed,
         segments=segments,
         sample_rate=sample_rate,
-        params_str=f"w={window}__th={threshold}__md={min_duration}__mg={min_gap}__p={padding}",
-        params_full_str=f"window={window} threshold={threshold}db min_duration={min_duration}s min_gap={min_gap}s padding={padding}s"
+        params=params,
     )
 
 

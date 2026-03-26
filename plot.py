@@ -1,6 +1,7 @@
 import logging
 import re
 from pathlib import Path
+from typing import Tuple
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.colors import LinearSegmentedColormap
@@ -90,8 +91,6 @@ def plot_data(
     data,
     file_name,
     outdir,
-    threshold=35,
-    padding=5,
     export=True,
     show=False,
 ):
@@ -121,7 +120,7 @@ def plot_data(
         analysis.segments,
         0.4,
         colors.lavender,
-        padding=padding,
+        padding=analysis.params.padding,
         padding_color=colors.red,
     )
     subplot_segements(
@@ -129,12 +128,12 @@ def plot_data(
         analysis.segments,
         0.3,
         colors.green,
-        padding=padding,
+        padding=analysis.params.padding,
         padding_color=colors.pink,
     )
     subplot_spectrum_mean_intensity(ax3, analysis.smoothed, colors.peach, analysis.t)
     # plot threshold
-    ax3.plot([0, analysis.t[-1]], [threshold, threshold], color=colors.sapphire)
+    ax3.plot([0, analysis.t[-1]], [analysis.params.threshold, analysis.params.threshold], color=colors.sapphire)
 
     # format labels
     ax3.set_xlabel("Time (min.)")
@@ -156,11 +155,11 @@ def plot_data(
 
     # Parameters text at top
     fig.text(
-        0.5, 0.97, f"sample rate: {analysis.sample_rate // 1000}kbs {analysis.params_full_str}", color=colors.text, ha="center", va="top"
+        0.5, 0.97, f"sample rate: {analysis.sample_rate // 1000}kbs {str(analysis.params)}", color=colors.text, ha="center", va="top"
     )
 
     if export:
-        save_figure(fig, outdir, f"{file_name}__segment_plot__{analysis.params_str}")
+        save_figure(fig, outdir, f"{file_name}__segment_plot__{repr(analysis.params)}")
     if show:
         plt.show()
     return fig
@@ -188,14 +187,15 @@ def _format_x_axis(ax):
 
 
 def _param_label(analysis: AudioAnalysis, factor: str) -> str:
-    match = re.search(rf"{re.escape(factor)}=([^\s]+)", analysis.params_full_str)
-    return f"{factor}={match.group(1)}" if match else analysis.params_str
+    match = re.search(rf"{re.escape(factor)}=([^\s]+)", str(analysis.params))
+    return f"{factor}={match.group(1)}" if match else repr(analysis.params)
 
 
 def experimental_plots_compare_segments(
     control_analysis: AudioAnalysis,
     compare_analyses: list[AudioAnalysis],
     compare_factor: str,
+    control_analysis_y_range: Tuple[ int, int ] = None
 ):
     n = len(compare_analyses)
     height_ratios = [3] + [1] * n
@@ -216,10 +216,13 @@ def experimental_plots_compare_segments(
     ax_smooth.set_ylabel("Mean int. (dB)")
     ax_smooth.margins(x=0)
 
+    if control_analysis_y_range:
+        ax_smooth.set_ylim(control_analysis_y_range[0], control_analysis_y_range[1])
+
     # If comparing threshold, overlay each threshold line on the smoothed plot
     if compare_factor == "threshold":
         for i, analysis in enumerate(compare_analyses):
-            m = re.search(r"threshold=([0-9.]+)", analysis.params_full_str)
+            m = re.search(r"threshold=([0-9.]+)", str(analysis.params))
             if m:
                 ax_smooth.axhline(
                     float(m.group(1)),
@@ -246,7 +249,7 @@ def experimental_plots_compare_segments(
     fig.suptitle(f"Comparing {compare_factor}", color=colors.text, y=0.98)
     fig.text(
         0.5, 0.94,
-        f"sample rate: {control_analysis.sample_rate // 1000}kbs  {control_analysis.params_full_str}",
+        f"sample rate: {control_analysis.sample_rate // 1000}kbs  {str(analysis.params)}",
         color=colors.text, ha="center", va="top", fontsize=8,
     )
     fig.subplots_adjust(hspace=0.05, top=0.90, right=0.97)
@@ -285,7 +288,7 @@ def experimental_plots_compare_smoothed_and_segments(
     fig.suptitle(f"Comparing {compare_factor}", color=colors.text, y=0.98)
     fig.text(
         0.5, 0.94,
-        f"sample rate: {compare_analyses[0].sample_rate // 1000}kbs  {compare_analyses[0].params_full_str}",
+        f"sample rate: {compare_analyses[0].sample_rate // 1000}kbs  {str(compare_analyses[0].params)}",
         color=colors.text, ha="center", va="top", fontsize=8,
     )
     fig.subplots_adjust(hspace=0.1, top=0.90, right=0.97)

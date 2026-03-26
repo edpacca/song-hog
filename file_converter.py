@@ -5,8 +5,6 @@ import struct
 
 import ffmpeg
 
-file_path = "./media/szary_copy.wav"
-
 def normalise_16bit(data):
     return [ abs(float(value) / pow(2, 15)) for value in data ]
 
@@ -43,10 +41,3 @@ def convert_m4as_to_mp3s(m4a_paths, output_dir, base_name):
         Path(m4a_path).unlink()
         paths.append(str(out_path))
     return paths
-
-def main():
-    data = read_16bit_to_float(file_path)
-    print(normalise_16bit(data))
-
-if __name__ == "__main__":
-    main()
