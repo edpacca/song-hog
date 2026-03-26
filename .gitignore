@@ -14,3 +14,4 @@ wheels/
 **/*.mp3
 **/*.png
 .env
+**/*settings.local.json
