@@ -1,4 +1,6 @@
 import unittest
+import unittest.mock
+import socket
 import sys
 import os
 
@@ -7,8 +9,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from file_loader._validation import (
     _INVALID_URL_ERROR,
     _DEFAULT_FILE_ID_RE,
+    _resolves_to_private_ip,
     extract_file_id,
     sanitize_filename,
+    validate_url,
 )
 from file_loader.downloader import GOOGLE_RECORDER
 
@@ -75,6 +79,72 @@ class TestSanitizeFilename(unittest.TestCase):
     def test_unicode_replaced(self):
         result = sanitize_filename("café.m4a")
         self.assertRegex(result, r"^[\w\-._]+$")
+
+
+class TestResolvesToPrivateIp(unittest.TestCase):
+
+    def _make_addrinfo(self, ip):
+        # socket.getaddrinfo returns a list of 5-tuples; [4] is (address, port, ...)
+        return [(None, None, None, None, (ip, 0))]
+
+    def test_loopback_is_blocked(self):
+        with unittest.mock.patch("socket.getaddrinfo", return_value=self._make_addrinfo("127.0.0.1")):
+            self.assertTrue(_resolves_to_private_ip("localhost"))
+
+    def test_private_range_is_blocked(self):
+        with unittest.mock.patch("socket.getaddrinfo", return_value=self._make_addrinfo("192.168.1.1")):
+            self.assertTrue(_resolves_to_private_ip("internal.host"))
+
+    def test_link_local_is_blocked(self):
+        with unittest.mock.patch("socket.getaddrinfo", return_value=self._make_addrinfo("169.254.169.254")):
+            self.assertTrue(_resolves_to_private_ip("metadata.internal"))
+
+    def test_public_ip_is_allowed(self):
+        with unittest.mock.patch("socket.getaddrinfo", return_value=self._make_addrinfo("8.8.8.8")):
+            self.assertFalse(_resolves_to_private_ip("dns.google"))
+
+    def test_unresolvable_host_is_blocked(self):
+        with unittest.mock.patch("socket.getaddrinfo", side_effect=socket.gaierror):
+            self.assertTrue(_resolves_to_private_ip("this.does.not.exist"))
+
+
+class TestValidateUrl(unittest.TestCase):
+    """Direct unit tests for validate_url using GOOGLE_RECORDER as config."""
+
+    def test_valid_url_does_not_raise(self):
+        with unittest.mock.patch("file_loader._validation._resolves_to_private_ip", return_value=False):
+            validate_url(GOOGLE_RECORDER, "https://recorder.google.com/abc123")
+
+    def test_length_cap(self):
+        long_url = "https://recorder.google.com/" + "a" * 2048
+        with self.assertRaises(ValueError) as ctx:
+            validate_url(GOOGLE_RECORDER, long_url)
+        self.assertEqual(str(ctx.exception), _INVALID_URL_ERROR)
+
+    def test_wrong_scheme(self):
+        with self.assertRaises(ValueError):
+            validate_url(GOOGLE_RECORDER, "http://recorder.google.com/abc123")
+
+    def test_wrong_host(self):
+        with self.assertRaises(ValueError):
+            validate_url(GOOGLE_RECORDER, "https://evil.com/abc123")
+
+    def test_directory_traversal_raw(self):
+        with self.assertRaises(ValueError):
+            validate_url(GOOGLE_RECORDER, "https://recorder.google.com/../etc/passwd")
+
+    def test_directory_traversal_encoded(self):
+        with self.assertRaises(ValueError):
+            validate_url(GOOGLE_RECORDER, "https://recorder.google.com/..%2Fetc%2Fpasswd")
+
+    def test_empty_path_raises(self):
+        with self.assertRaises(ValueError):
+            validate_url(GOOGLE_RECORDER, "https://recorder.google.com/")
+
+    def test_ssrf_private_ip_raises(self):
+        with unittest.mock.patch("file_loader._validation._resolves_to_private_ip", return_value=True):
+            with self.assertRaises(ValueError):
+                validate_url(GOOGLE_RECORDER, "https://recorder.google.com/abc123")
 
 
 if __name__ == "__main__":
