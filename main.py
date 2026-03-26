@@ -1,3 +1,5 @@
+from __future__ import annotations
+import copy
 from dataclasses import dataclass
 import logging
 import os
@@ -10,7 +12,6 @@ import plot
 import process
 import file_converter
 
-
 @dataclass
 class FileSessionData:
     init_m4a_file_path: str
@@ -18,7 +19,6 @@ class FileSessionData:
     init_file_name: str
     file_name: str
     session_dir: str
-
 
 def test_get_file_paths(media_dir, download: False):
     if download:
@@ -69,9 +69,9 @@ def download_file(download_link, media_dir):
     return file_path, file_name
 
 
-def analyse(wav_path, sample_rate, file_name, session_dir, **kwargs):
+def analyse(wav_path, sample_rate, file_name, session_dir, params: process.AnalysisParams = None):
     data = file_converter.read_16bit_to_float(wav_path)
-    analysis = process.analyze(data, sample_rate, **kwargs)
+    analysis = process.analyze(data, sample_rate, params)
     plot.plot_data(analysis, data, file_name, session_dir)
     return analysis
 
@@ -84,18 +84,44 @@ def process_segments(input_m4a_file_path, analysis, out_dir, out_file_name):
     file_converter.convert_m4as_to_mp3s(m4a_segment_paths, out_dir, out_file_name)
 
 
+experimental_params = process.AnalysisParams(400, 35, 40, 20, 5)
+
+# Experiments - tweaking parameters
 def test_compare_window_values(file_session_data, sample_rate):
     analyses = []
     data = file_converter.read_16bit_to_float(file_session_data.wav_path)
 
     windows = [1, 100, 200, 400, 600, 800, 1200]
     for window in windows:
-        analysis = process.analyze(data, sample_rate, window=window)
+        analysis = process.analyze(data, sample_rate, process.AnalysisParams(
+            window=window,
+            threshold=experimental_params.threshold,
+            min_duration=experimental_params.min_duration,
+            min_gap=experimental_params.min_gap,
+            padding=experimental_params.padding))
         analyses.append(analysis)
     figure = plot.experimental_plots_compare_smoothed_and_segments(analyses, "window")
-    expt_file_name = f"{file_session_data.file_name}_compare_window"
+    expt_file_name = f"{file_session_data.file_name}_compare_window_flat_params"
     plot.save_figure(figure, file_session_data.session_dir, expt_file_name)
 
+def test_compare_thresholds(file_session_data, sample_rate):
+    analyses = []
+    data = file_converter.read_16bit_to_float(file_session_data.wav_path)
+    for i in range(40, 33, -1):
+        analysis = process.analyze(data, sample_rate, process.AnalysisParams(
+            window=experimental_params.window,
+            threshold=i,
+            min_duration=experimental_params.min_duration,
+            min_gap=experimental_params.min_gap,
+            padding=experimental_params.padding))
+        analyses.append(analysis)
+    figure = plot.experimental_plots_compare_segments(
+        analyses[0],
+        analyses[1:],
+        "threshold",
+        [30, 45])
+    expt_file_name = f"{file_session_data.file_name}_compare_threshold_w800"
+    plot.save_figure(figure, file_session_data.session_dir, expt_file_name)
 
 def main():
     logging.basicConfig(
@@ -107,8 +133,8 @@ def main():
     Path(file_session_data.session_dir).mkdir(parents=True, exist_ok=True)
     # test_analysis(file_session_data, sample_rate)
     # test_process_segments(file_session_data)
-
-    test_compare_window_values(file_session_data, sample_rate)
+    # test_compare_window_values(file_session_data, sample_rate)
+    # test_compare_thresholds(file_session_data, sample_rate)
 
 
 if __name__ == "__main__":
