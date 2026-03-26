@@ -34,6 +34,8 @@ GOOGLE_RECORDER = ServiceConfig(
     ),
 )
 
+_REDIRECT_STATUS_CODES = (301, 302, 303, 307, 308)
+
 
 class Downloader:
     """
@@ -67,79 +69,131 @@ class Downloader:
         """
         self.validate_url(url)
         file_id = self.extract_id(url)
-
-        download_url = f"{self._config.download_url_base}{file_id}"
-
-        # Assert the constructed URL matches the expected shape before making any request
-        if not self._config.download_url_re.match(download_url):
-            raise ValueError(_validation._INVALID_URL_ERROR)
-
         print(f"file id: {file_id}")
 
-        # Redirects disabled — we only connect to the URL we explicitly constructed
+        download_url = self._build_download_url(file_id)
+
         session = requests.Session()
+        # Redirects disabled — we only connect to the URL we explicitly constructed
+        with self._make_streaming_get(session, download_url) as initial_response:
+            file_name = self._parse_filename(initial_response)
+            destination_path = f"{destination}/{file_name}"
+            total_size = self._parse_total_size(initial_response)
+            expected_size = int(initial_response.headers.get("Content-Length", 0))
+
+        print(f"Total size: {total_size / 1024 / 1024:.1f} MB")
+
+        self._stream_to_file(session, download_url, destination_path, total_size)
+        self._verify_download(destination_path, expected_size)
+
+        actual_size = os.path.getsize(destination_path)
+        print(f"Saved to {destination_path} ({actual_size / 1024 / 1024:.1f} MB)")
+        return destination_path
+
+    # -- Private helpers ------------------------------------------------------
+
+    def _build_download_url(self, file_id: str) -> str:
+        """Construct the download URL and assert it matches the expected shape."""
+        download_url = f"{self._config.download_url_base}{file_id}"
+        if not self._config.download_url_re.match(download_url):
+            raise ValueError(_validation._INVALID_URL_ERROR)
+        return download_url
+
+    def _make_streaming_get(
+        self,
+        session: requests.Session,
+        url: str,
+        headers: dict | None = None,
+    ) -> requests.Response:
+        """
+        Issue a streaming GET with redirects disabled.
+        Raises RuntimeError on any redirect, raises on non-2xx status.
+        """
         response = session.get(
-            download_url,
+            url,
+            headers=headers or {},
             stream=True,
             timeout=(10, 60),
             allow_redirects=False,
         )
-        if response.is_redirect or response.status_code in (301, 302, 303, 307, 308):
+        if response.is_redirect or response.status_code in _REDIRECT_STATUS_CODES:
             raise RuntimeError("Unexpected redirect from download server")
         response.raise_for_status()
+        return response
 
+    def _parse_filename(self, response: requests.Response) -> str:
+        """Extract and sanitise the filename from the Content-Disposition header."""
         cd = response.headers.get("Content-Disposition", "")
         if "filename=" not in cd:
             raise RuntimeError("Server response missing Content-Disposition filename")
         raw_name = cd.split("filename=")[1].strip().strip('"')
-        file_name = _validation.sanitize_filename(raw_name)
-        destination_path = f"{destination}/{file_name}"
+        return _validation.sanitize_filename(raw_name)
 
+    def _parse_total_size(self, response: requests.Response) -> int:
+        """
+        Resolve the total file size from the response headers.
+        Prefers Content-Range (partial responses) over Content-Length.
+        """
         content_range = response.headers.get("Content-Range", "")
-        total_size = (
-            int(content_range.split("/")[1])
-            if "/" in content_range
-            else int(response.headers["Content-Length"])
+        if "/" in content_range:
+            return int(content_range.split("/")[1])
+        return int(response.headers["Content-Length"])
+
+    def _fetch_chunk(
+        self,
+        session: requests.Session,
+        download_url: str,
+        f,
+        received: int,
+        total_size: int,
+    ) -> int:
+        """
+        Request bytes from `received` onwards, write each chunk to `f`.
+        Returns the number of bytes written in this fetch.
+        Raises RuntimeError if the server returns no data.
+        """
+        print(f"Fetching bytes {received}-{total_size - 1} ({received / total_size:.1%} done)...")
+        response = self._make_streaming_get(
+            session,
+            download_url,
+            headers={"Range": f"bytes={received}-"},
         )
 
-        print(f"Total size: {total_size / 1024 / 1024:.1f} MB")
+        chunk_received = 0
+        with response:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+                    chunk_received += len(chunk)
 
-        expected_size = int(response.headers.get("Content-Length", 0))
+        if chunk_received == 0:
+            raise RuntimeError(f"Server returned no data at offset {received}")
+
+        return chunk_received
+
+    def _stream_to_file(
+        self,
+        session: requests.Session,
+        download_url: str,
+        destination_path: str,
+        total_size: int,
+    ) -> None:
+        """Drive the resumable download loop, writing all chunks to destination_path."""
         received = 0
-
         with open(destination_path, "wb") as f:
             while received < total_size:
-                print(f"Fetching bytes {received}-{total_size - 1} ({received / total_size:.1%} done)...")
-                response = session.get(
-                    download_url,
-                    headers={"Range": f"bytes={received}-"},
-                    stream=True,
-                    timeout=(10, 60),
-                    allow_redirects=False,
-                )
-                if response.is_redirect or response.status_code in (301, 302, 303, 307, 308):
-                    raise RuntimeError("Unexpected redirect during chunked download")
-                response.raise_for_status()
+                received += self._fetch_chunk(session, download_url, f, received, total_size)
 
-                chunk_received = 0
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-                        received += len(chunk)
-                        chunk_received += len(chunk)
-
-                if chunk_received == 0:
-                    raise RuntimeError(f"Server returned no data at offset {received}")
-
+    def _verify_download(self, destination_path: str, expected_size: int) -> None:
+        """Raise RuntimeError if the saved file is smaller than expected_size."""
+        if not expected_size:
+            return
         actual_size = os.path.getsize(destination_path)
-        if expected_size and actual_size < expected_size:
+        if actual_size < expected_size:
             raise RuntimeError(
                 f"Incomplete download: got {actual_size} of {expected_size} bytes "
                 f"({actual_size / expected_size:.1%})"
             )
-
-        print(f"Saved to {destination_path} ({actual_size / 1024 / 1024:.1f} MB)")
-        return destination_path
 
 
 # Pre-built instance for convenience and backward compatibility.
