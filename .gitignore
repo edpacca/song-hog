@@ -13,6 +13,7 @@ wheels/
 **/*.m4a
 **/*.mp3
 **/*.png
+!static/**/*.png
 .env
 **/*settings.local.json
 media/
