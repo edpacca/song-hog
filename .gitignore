@@ -15,3 +15,5 @@ wheels/
 **/*.png
 .env
 **/*settings.local.json
+media/
+queue/
