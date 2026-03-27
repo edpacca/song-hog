@@ -1,6 +1,11 @@
+import logging
 import os
 from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
+from dotenv import load_dotenv
+load_dotenv()
+
+logger = logging.getLogger("song_hog.auth")
 
 _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -8,8 +13,10 @@ _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 def get_api_key(api_key: str = Security(_API_KEY_HEADER)) -> str:
     expected = os.getenv("SONG_HOG_API_KEY")
     if not expected:
+        logger.critical("SONG_HOG_API_KEY environment variable is not set")
         raise RuntimeError("SONG_HOG_API_KEY environment variable is not set")
     if not api_key or api_key != expected:
+        logger.warning("Rejected request — invalid or missing API key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",

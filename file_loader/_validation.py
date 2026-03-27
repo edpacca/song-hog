@@ -1,10 +1,13 @@
 import ipaddress
+import logging
 import re
 import socket
 import unicodedata
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import unquote, urlparse
+
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------
 # Protocol — used to type-hint config parameters without importing
@@ -50,14 +53,17 @@ def _resolves_to_private_ip(hostname: str) -> bool:
     try:
         results = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
+        logger.warning("SSRF block: unresolvable hostname=%s", hostname)
         return True  # unresolvable — treat as blocked
     for result in results:
         addr = result[4][0]
         try:
             ip = ipaddress.ip_address(addr)
             if any(ip in net for net in _BLOCKED_NETWORKS):
+                logger.warning("SSRF block: hostname=%s resolved to private IP=%s", hostname, ip)
                 return True
         except ValueError:
+            logger.warning("SSRF block: hostname=%s unparseable address=%s", hostname, addr)
             return True  # unparseable address — treat as blocked
     return False
 
@@ -90,6 +96,7 @@ def validate_url(config: _ConfigProtocol, url: str) -> None:
 
     # 4. Host must match exactly (no subdomains, no IP literals)
     if parsed.netloc != config.expected_host:
+        logger.warning("URL rejected: unexpected host=%s (expected %s)", parsed.netloc, config.expected_host)
         raise ValueError(_INVALID_URL_ERROR)
 
     # 5. Directory traversal — check raw path and all decoded forms
