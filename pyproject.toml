@@ -5,7 +5,12 @@ description = "Identify and chop songs out from long recordings"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "black>=26.3.1",
+    "fastapi>=0.115.0",
     "ffmpeg-python>=0.2.0",
     "matplotlib>=3.10.8",
+    "python-multipart>=0.0.20",
+    "python-dotenv>=1.0.0",
     "requests>=2.32.5",
+    "uvicorn>=0.34.0",
 ]
