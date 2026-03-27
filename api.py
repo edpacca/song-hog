@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import uuid
 import matplotlib
@@ -11,10 +12,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import file_converter
-import file_loader
 import plot
 import process
 from auth import get_api_key
+from file_loader import Downloader, GOOGLE_RECORDER
+from logging_config import configure_logging
+
+configure_logging()
+logger = logging.getLogger("song_hog.api")
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", str(Path(__file__).parent / "media")))
 QUEUE_DIR = Path(os.getenv("QUEUE_DIR", str(MEDIA_DIR.parent / "queue")))
@@ -22,9 +27,13 @@ SAMPLE_RATE = 16000
 
 app = FastAPI(title="Song Hog API")
 
+# Downloader instance — swap GOOGLE_RECORDER for a different ServiceConfig to change target service
+_downloader = Downloader(GOOGLE_RECORDER)
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={"detail": f"Unexpected server error: {type(exc).__name__}: {exc}"},
@@ -74,9 +83,11 @@ def _enqueue(session_name: str, folder_path: Path) -> None:
     }
     job_file = pending / f"{job['id']}.json"
     job_file.write_text(json.dumps(job, indent=2))
+    logger.info("Enqueued job %s for session=%s", job["id"], session_name)
 
 
 def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
+    logger.info("Pipeline start: session=%s m4a=%s", session_name, m4a_path)
     outdir = MEDIA_DIR / session_name
     try:
         outdir.mkdir(parents=True, exist_ok=True)
@@ -89,24 +100,29 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
         data = file_converter.read_16bit_to_float(str(wav_path))
         analysis = process.analyze(data, SAMPLE_RATE)
     except Exception as exc:
+        logger.exception("Audio conversion failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio conversion failed: {exc}")
 
     try:
         plot.plot_data(analysis, data, session_name, str(outdir), export=True, show=False)
         segments = analysis.segments
     except Exception as exc:
+        logger.exception("Audio analysis/plotting failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio analysis/plotting failed: {exc}")
 
     try:
         file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
     except Exception as exc:
+        logger.exception("Segment extraction failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
 
     try:
         _enqueue(session_name, outdir)
     except Exception as exc:
+        logger.exception("Enqueue failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Failed to enqueue job: {exc}")
 
+    logger.info("Pipeline complete: session=%s segments=%d", session_name, len(segments))
     return ProcessResponse(
         file_name=session_name,
         segments=segments,
@@ -118,7 +134,7 @@ def _download_and_pipeline(url: str) -> ProcessResponse:
     """Download an M4A from `url` into MEDIA_DIR and run the processing pipeline."""
     _check_media_dir()
     try:
-        downloaded = file_loader.download_file(url, str(MEDIA_DIR))
+        downloaded = _downloader.download(url, str(MEDIA_DIR))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Download failed: {exc}")
 
@@ -129,15 +145,17 @@ def _download_and_pipeline(url: str) -> ProcessResponse:
 
 @app.post("/process/url", response_model=ProcessResponse)
 def process_url(body: UrlRequest, _: str = Depends(get_api_key)):
-    """Download and process a recording by Google Recorder URL."""
+    """Download and process a recording by URL."""
+    logger.info("POST /process/url url=%s", body.url)
     return _download_and_pipeline(body.url)
 
 
 @app.post("/process/id", response_model=ProcessResponse)
 def process_id(body: IdRequest, _: str = Depends(get_api_key)):
-    """Download and process a recording by Google Recorder file ID."""
-    google_url = f"{file_loader.google_url_base}{body.file_id}"
-    return _download_and_pipeline(google_url)
+    """Download and process a recording by file ID."""
+    logger.info("POST /process/id file_id=%s", body.file_id)
+    url = f"{_downloader.input_url_base}{body.file_id}"
+    return _download_and_pipeline(url)
 
 
 @app.post("/process/upload", response_model=ProcessResponse)
@@ -146,6 +164,7 @@ async def process_upload(
     _: str = Depends(get_api_key),
 ):
     """Upload an M4A file directly and process it."""
+    logger.info("POST /process/upload filename=%s", file.filename)
     if not file.filename or not file.filename.lower().endswith(".m4a"):
         raise HTTPException(status_code=400, detail="Only .m4a files are accepted")
 

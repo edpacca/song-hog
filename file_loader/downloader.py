@@ -52,6 +52,11 @@ class Downloader:
     def __init__(self, config: ServiceConfig) -> None:
         self._config = config
 
+    @property
+    def input_url_base(self) -> str:
+        """The input URL base for this service (e.g. used to construct URLs from file IDs)."""
+        return self._config.input_url_base
+
     def validate_url(self, url: str) -> None:
         """Validate url against this service's rules. Raises ValueError on failure."""
         _validation.validate_url(self._config, url)
