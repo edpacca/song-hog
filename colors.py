@@ -1,3 +1,5 @@
+# Beautiful colors from https://catppuccin.com/palette/
+
 rosewater = "#f5e0dc"
 flamingo = "#f2cdcd"
 pink = "#f5c2e7"
