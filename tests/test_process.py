@@ -32,7 +32,7 @@ EXPECTED_SEGMENTS_SECONDS = [
 ]
 
 
-class TestAnalyzeWithTestWave(unittest.TestCase):
+class TestanalyseWithTestWave(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.data = read_16bit_to_float(TEST_WAVE)
