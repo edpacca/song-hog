@@ -52,11 +52,11 @@ class TestRunPipeline(unittest.TestCase):
         mock_convert.return_value = "/path/to/output.wav"
         mock_read.return_value = [0.1, 0.2, 0.3]
 
-    def _setup_analyze(self, mock_analyze, segments=None):
+    def _setup_analyse(self, mock_analyse, segments=None):
         """Setup mock for successful audio analysis."""
         if segments is None:
             segments = [(0.0, 1.5)]
-        mock_analyze.return_value = MagicMock(segments=segments)
+        mock_analyse.return_value = MagicMock(segments=segments)
 
     def _assert_http_exception(self, ctx, status_code, message_substring):
         """Assert HTTPException has expected status code and message."""
@@ -66,7 +66,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api._enqueue')
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
-    @patch('api.process.analyze')
+    @patch('api.process.analyse')
     @patch('api.file_converter.read_16bit_to_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
@@ -75,15 +75,15 @@ class TestRunPipeline(unittest.TestCase):
         mock_media_dir,
         mock_convert,
         mock_read,
-        mock_analyze,
+        mock_analyse,
         mock_plot,
         mock_extract,
         mock_enqueue,
     ):
-        """Test successful pipeline: converts, analyzes, plots, extracts, and enqueues."""
+        """Test successful pipeline: converts, analyses, plots, extracts, and enqueues."""
         mock_outdir = self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
-        self._setup_analyze(mock_analyze, segments=[(0.0, 1.5), (3.0, 4.5)])
+        self._setup_analyse(mock_analyse, segments=[(0.0, 1.5), (3.0, 4.5)])
 
         m4a_path, session_name = self._get_test_paths()
 
@@ -100,7 +100,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_outdir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
         mock_convert.assert_called_once_with(str(m4a_path), session_name, mock_outdir)
         mock_read.assert_called_once_with("/path/to/output.wav")
-        mock_analyze.assert_called_once()
+        mock_analyse.assert_called_once()
         mock_plot.assert_called_once()
         mock_extract.assert_called_once()
         mock_enqueue.assert_called_once_with(session_name, mock_outdir)
@@ -145,7 +145,7 @@ class TestRunPipeline(unittest.TestCase):
         self._assert_http_exception(ctx, 500, "Audio conversion failed")
         mock_read.assert_not_called()
 
-    @patch('api.process.analyze')
+    @patch('api.process.analyse')
     @patch('api.file_converter.read_16bit_to_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
@@ -154,7 +154,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_media_dir,
         mock_convert,
         mock_read,
-        mock_analyze,
+        mock_analyse,
     ):
         """Test failure when reading WAV file data."""
         self._setup_mock_outdir(mock_media_dir)
@@ -167,25 +167,25 @@ class TestRunPipeline(unittest.TestCase):
             _run_pipeline(m4a_path, session_name)
 
         self._assert_http_exception(ctx, 500, "Audio conversion failed")
-        mock_analyze.assert_not_called()
+        mock_analyse.assert_not_called()
 
     @patch('api.plot.plot_data')
-    @patch('api.process.analyze')
+    @patch('api.process.analyse')
     @patch('api.file_converter.read_16bit_to_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
-    def test_run_pipeline_analyze_failure(
+    def test_run_pipeline_analyse_failure(
         self,
         mock_media_dir,
         mock_convert,
         mock_read,
-        mock_analyze,
+        mock_analyse,
         mock_plot,
     ):
         """Test failure during audio analysis."""
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
-        mock_analyze.side_effect = ValueError("Invalid audio data")
+        mock_analyse.side_effect = ValueError("Invalid audio data")
 
         m4a_path, session_name = self._get_test_paths()
 
@@ -197,7 +197,7 @@ class TestRunPipeline(unittest.TestCase):
 
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
-    @patch('api.process.analyze')
+    @patch('api.process.analyse')
     @patch('api.file_converter.read_16bit_to_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
@@ -206,14 +206,14 @@ class TestRunPipeline(unittest.TestCase):
         mock_media_dir,
         mock_convert,
         mock_read,
-        mock_analyze,
+        mock_analyse,
         mock_plot,
         mock_extract,
     ):
         """Test failure during plotting."""
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
-        self._setup_analyze(mock_analyze)
+        self._setup_analyse(mock_analyse)
         mock_plot.side_effect = RuntimeError("Matplotlib error")
 
         m4a_path, session_name = self._get_test_paths()
@@ -227,7 +227,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api._enqueue')
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
-    @patch('api.process.analyze')
+    @patch('api.process.analyse')
     @patch('api.file_converter.read_16bit_to_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
@@ -236,7 +236,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_media_dir,
         mock_convert,
         mock_read,
-        mock_analyze,
+        mock_analyse,
         mock_plot,
         mock_extract,
         mock_enqueue,
@@ -244,7 +244,7 @@ class TestRunPipeline(unittest.TestCase):
         """Test failure during segment extraction."""
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
-        self._setup_analyze(mock_analyze)
+        self._setup_analyse(mock_analyse)
         mock_extract.side_effect = RuntimeError("ffmpeg error")
 
         m4a_path, session_name = self._get_test_paths()
@@ -258,7 +258,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api._enqueue')
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
-    @patch('api.process.analyze')
+    @patch('api.process.analyse')
     @patch('api.file_converter.read_16bit_to_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
@@ -267,7 +267,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_media_dir,
         mock_convert,
         mock_read,
-        mock_analyze,
+        mock_analyse,
         mock_plot,
         mock_extract,
         mock_enqueue,
@@ -275,7 +275,7 @@ class TestRunPipeline(unittest.TestCase):
         """Test failure when enqueuing job."""
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
-        self._setup_analyze(mock_analyze)
+        self._setup_analyse(mock_analyse)
         mock_enqueue.side_effect = OSError("Queue directory not writable")
 
         m4a_path, session_name = self._get_test_paths()

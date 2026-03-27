@@ -52,7 +52,7 @@ def convert_m4a_to_mono_wav(m4a_path: str, file_name: str, output_dir: str, samp
     """
     output_path = Path(output_dir) / f"{file_name}.wav"
     logger.info(f"Converting {m4a_path} to mono WAV at {sample_rate}Hz -> {output_path}")
-    ffmpeg.input(m4a_path).output(str(output_path), ac=1, ar=sample_rate).run(quiet=True)
+    ffmpeg.input(m4a_path).output(str(output_path), ac=1, ar=sample_rate).run()
     return str(output_path)
 
 

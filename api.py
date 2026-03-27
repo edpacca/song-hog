@@ -98,7 +98,7 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
         # output_dir is relative to the project root (file_converter prepends __file__.parent)
         wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
         data = file_converter.read_16bit_to_float(str(wav_path))
-        analysis = process.analyze(data, SAMPLE_RATE)
+        analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env())
     except Exception as exc:
         logger.exception("Audio conversion failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio conversion failed: {exc}")
