@@ -1,5 +1,7 @@
 import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 import wave
 import struct
 from typing import Sequence
@@ -28,7 +30,7 @@ def read_16bit_to_float(path: str) -> tuple[int, ...]:
     Returns:
         Tuple of signed 16-bit integer sample values (all channels interleaved).
     """
-    logging.info(f"Reading file: {path}")
+    logger.info(f"Reading file: {path}")
     wave_read = wave.open(path)
     frames = wave_read.getnframes()
     chunks = wave_read.readframes(frames)
@@ -49,7 +51,7 @@ def convert_m4a_to_mono_wav(m4a_path: str, file_name: str, output_dir: str, samp
         Absolute path to the created WAV file.
     """
     output_path = Path(output_dir) / f"{file_name}.wav"
-    logging.info(f"Converting {m4a_path} to mono WAV at {sample_rate}Hz -> {output_path}")
+    logger.info(f"Converting {m4a_path} to mono WAV at {sample_rate}Hz -> {output_path}")
     ffmpeg.input(m4a_path).output(str(output_path), ac=1, ar=sample_rate).run(quiet=True)
     return str(output_path)
 
@@ -69,7 +71,7 @@ def extract_m4a_segments(m4a_path: str, t_segments: Sequence[tuple[float, float]
     paths = []
     for i, (start, end) in enumerate(t_segments):
         out_path = output_dir / f"segment_{i:02d}.m4a"
-        logging.info(f"Extracting segment {i:02d}: {start}s -> {end}s to {out_path}")
+        logger.info(f"Extracting segment {i:02d}: {start}s -> {end}s to {out_path}")
         ffmpeg.input(m4a_path, ss=start, to=end).output(str(out_path), c='copy').run(quiet=True)
         paths.append(str(out_path))
     return paths
@@ -90,9 +92,9 @@ def convert_m4as_to_mp3s(m4a_paths: list[str], output_dir: str, base_name: str) 
     paths = []
     for i, m4a_path in enumerate(m4a_paths):
         out_path = output_dir / f"{base_name}_segment_{i:02d}.mp3"
-        logging.info(f"Converting {m4a_path} to MP3 -> {out_path}")
+        logger.info(f"Converting {m4a_path} to MP3 -> {out_path}")
         ffmpeg.input(m4a_path).output(str(out_path)).run(quiet=True)
         Path(m4a_path).unlink()
-        logging.debug(f"Deleted source file: {m4a_path}")
+        logger.debug(f"Deleted source file: {m4a_path}")
         paths.append(str(out_path))
     return paths
