@@ -3,7 +3,7 @@ Song hog snuffles through recordings to find the bits that matter.
 An algorithm to identify and chop songs out from long recordings. Designed to help with extracting and reviewing demos from long recordings of band rehearsals.
 The API harness is fairly specifically tailored to my use-case with Ggl recordings, but it could easily be adapted or just run locally.
 
-![Example output plot from an hour long recording](/static/example_plot.png)
+![Example output plot from an hour long recording](./static/example_plot.png)
 
 ## How it works
 - Convert audio file to a mono 16bit wave and extract the amplitude data.
