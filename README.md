@@ -43,6 +43,56 @@ Minimum time required between detected segments for them not to be merged. For e
 - **Padding**
 Time added to the start and end of a detected segment. Applied before merging. Just gives a bit of leeway when detecting segments.
 
+## Running Locally
+
+Copy the following into a `.env` file at the project root and fill in the values:
+
+```env
+# Required: API authentication key (any string you choose)
+SONG_HOG_API_KEY=your-secret-key
+
+# Optional: override default storage locations
+MEDIA_DIR=media
+QUEUE_DIR=queue
+
+# Optional: logging
+LOG_LEVEL=INFO
+LOG_FILE=                        # leave blank to log to stdout only
+```
+
+Start the API in development mode:
+
+```bash
+uvicorn api:app --reload
+```
+
+## Downloader Configuration
+
+By default the API downloads from [Google Recorder](https://recorder.google.com). To target a different service, set the `DOWNLOADER_*` environment variables — no code changes required.
+
+If `DOWNLOADER_INPUT_URL_BASE` is set, all other required variables must also be provided or the API will refuse to start.
+
+| Variable | Description | Required |
+|---|---|---|
+| `DOWNLOADER_INPUT_URL_BASE` | Base URL of the recording service shown to users (e.g. `https://recorder.google.com/`) | Yes — activates custom config |
+| `DOWNLOADER_EXPECTED_HOST` | Hostname allowlist for input URLs (e.g. `recorder.google.com`) | Yes |
+| `DOWNLOADER_SCHEME` | Allowed URL scheme (e.g. `https`) | Yes |
+| `DOWNLOADER_DOWNLOAD_URL_BASE` | Base URL used to construct the actual download request | Yes |
+| `DOWNLOADER_FILE_ID_RE` | Regex allowlist for extracted file IDs (e.g. `^[a-zA-Z0-9\-]+$`) | Yes |
+| `DOWNLOADER_DOWNLOAD_URL_RE` | Regex the fully constructed download URL must match | Yes |
+| `DOWNLOADER_MAX_URL_LENGTH` | Maximum accepted input URL length | No (default: `2048`) |
+
+Example for a hypothetical alternative service:
+
+```env
+DOWNLOADER_INPUT_URL_BASE=https://myservice.com/recordings/
+DOWNLOADER_EXPECTED_HOST=myservice.com
+DOWNLOADER_SCHEME=https
+DOWNLOADER_DOWNLOAD_URL_BASE=https://api.myservice.com/download/
+DOWNLOADER_FILE_ID_RE=^[a-zA-Z0-9\-]+$
+DOWNLOADER_DOWNLOAD_URL_RE=^https://api\.myservice\.com/download/[a-zA-Z0-9\-]+$
+```
+
 ## API Test Client
 
 `api_test.py` is a CLI tool for hitting the API endpoints from the terminal. It loads credentials from `.env` by default. Just a nice way of manually checking everything is working locally without crafting curl commands.

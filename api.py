@@ -15,7 +15,7 @@ import file_converter
 import plot
 import process
 from auth import get_api_key
-from file_loader import Downloader, GOOGLE_RECORDER
+from file_loader import downloader_from_env
 from logging_config import configure_logging
 
 configure_logging()
@@ -27,8 +27,8 @@ SAMPLE_RATE = 16000
 
 app = FastAPI(title="Song Hog API")
 
-# Downloader instance — swap GOOGLE_RECORDER for a different ServiceConfig to change target service
-_downloader = Downloader(GOOGLE_RECORDER)
+# Downloader instance — configure via DOWNLOADER_* env vars to target a different service
+_downloader = downloader_from_env()
 
 
 @app.exception_handler(Exception)

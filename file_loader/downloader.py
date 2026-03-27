@@ -206,3 +206,39 @@ class Downloader:
 
 # Pre-built instance for convenience and backward compatibility.
 google_recorder = Downloader(GOOGLE_RECORDER)
+
+
+def downloader_from_env() -> "Downloader":
+    """
+    Build a Downloader from DOWNLOADER_* environment variables.
+    Falls back to google_recorder if DOWNLOADER_INPUT_URL_BASE is not set.
+    Raises ValueError if only some required vars are provided.
+    """
+    sentinel = os.getenv("DOWNLOADER_INPUT_URL_BASE")
+    if sentinel is None:
+        return google_recorder
+
+    required = {
+        "DOWNLOADER_INPUT_URL_BASE":    sentinel,
+        "DOWNLOADER_EXPECTED_HOST":     os.getenv("DOWNLOADER_EXPECTED_HOST"),
+        "DOWNLOADER_SCHEME":            os.getenv("DOWNLOADER_SCHEME"),
+        "DOWNLOADER_DOWNLOAD_URL_BASE": os.getenv("DOWNLOADER_DOWNLOAD_URL_BASE"),
+        "DOWNLOADER_FILE_ID_RE":        os.getenv("DOWNLOADER_FILE_ID_RE"),
+        "DOWNLOADER_DOWNLOAD_URL_RE":   os.getenv("DOWNLOADER_DOWNLOAD_URL_RE"),
+    }
+    missing = [k for k, v in required.items() if v is None]
+    if missing:
+        raise ValueError(
+            f"DOWNLOADER_INPUT_URL_BASE is set but missing: {', '.join(missing)}"
+        )
+
+    config = ServiceConfig(
+        input_url_base=required["DOWNLOADER_INPUT_URL_BASE"],
+        expected_host=required["DOWNLOADER_EXPECTED_HOST"],
+        scheme=required["DOWNLOADER_SCHEME"],
+        download_url_base=required["DOWNLOADER_DOWNLOAD_URL_BASE"],
+        file_id_re=re.compile(required["DOWNLOADER_FILE_ID_RE"]),
+        download_url_re=re.compile(required["DOWNLOADER_DOWNLOAD_URL_RE"]),
+        max_url_length=int(os.getenv("DOWNLOADER_MAX_URL_LENGTH", "2048")),
+    )
+    return Downloader(config)
