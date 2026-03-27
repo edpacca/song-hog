@@ -33,6 +33,7 @@ from file_loader.downloader import (
     GOOGLE_RECORDER,
     Downloader,
     ServiceConfig,
+    downloader_from_env,
     google_recorder,
 )
 
@@ -55,6 +56,7 @@ __all__ = [
     "Downloader",
     "GOOGLE_RECORDER",
     "google_recorder",
+    "downloader_from_env",
     # Backward compat
     "google_url_base",
     "download_file",
