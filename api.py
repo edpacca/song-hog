@@ -8,7 +8,8 @@ matplotlib.use("Agg")  # headless, no display required
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import file_converter
@@ -26,6 +27,14 @@ QUEUE_DIR = Path(os.getenv("QUEUE_DIR", str(MEDIA_DIR.parent / "queue")))
 SAMPLE_RATE = 16000
 
 app = FastAPI(title="Song Hog API")
+
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/static/index.html")
+
 
 # Downloader instance — configure via DOWNLOADER_* env vars to target a different service
 _downloader = downloader_from_env()
