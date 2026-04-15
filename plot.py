@@ -136,11 +136,7 @@ def plot_data(
     ax3.plot([0, analysis.t[-1]], [analysis.params.threshold, analysis.params.threshold], color=colors.sapphire)
 
     # format labels
-    ax3.set_xlabel("Time (min.)")
-    ax3.xaxis.set_major_locator(ticker.MultipleLocator(300))
-    ax3.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / 60)}"))
-    ax3.xaxis.set_minor_locator(ticker.MultipleLocator(60))
-    ax3.xaxis.set_minor_formatter(ticker.NullFormatter())
+    _format_x_axis(ax3, False)
 
     # format margins
     ax1.margins(x=0)
@@ -178,12 +174,15 @@ _SEGMENT_COLORS = [
 ]
 
 
-def _format_x_axis(ax):
-    ax.set_xlabel("Time (min.)")
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(300))
-    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / 60)}"))
-    ax.xaxis.set_minor_locator(ticker.MultipleLocator(60))
-    ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+def _format_x_axis(ax, minutes = True):
+    if minutes:
+        ax.set_xlabel("Time (min.)")
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(300))
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / 60)}"))
+        ax.xaxis.set_minor_locator(ticker.MultipleLocator(60))
+        ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+    else:
+        ax.set_xlabel("Time (s)")
 
 
 def _param_label(analysis: AudioAnalysis, factor: str) -> str:

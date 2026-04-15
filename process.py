@@ -1,4 +1,5 @@
 import logging
+import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -34,6 +35,17 @@ class AudioAnalysis:
     params: AnalysisParams
 
 
+def params_from_env() -> AnalysisParams:
+    defaults = AnalysisParams()
+    return AnalysisParams(
+        window=int(os.getenv("ANALYSIS_WINDOW", defaults.window)),
+        threshold=float(os.getenv("ANALYSIS_THRESHOLD", defaults.threshold)),
+        min_duration=float(os.getenv("ANALYSIS_MIN_DURATION", defaults.min_duration)),
+        min_gap=float(os.getenv("ANALYSIS_MIN_GAP", defaults.min_gap)),
+        padding=float(os.getenv("ANALYSIS_PADDING", defaults.padding)),
+    )
+
+
 def compute_spectrogram(
     data: np.ndarray,
     sample_rate: int,
@@ -46,13 +58,11 @@ def compute_spectrogram(
     return spectrum, freqs, t
 
 
-def analyze(
+def analyse(
     data: np.ndarray,
     sample_rate: int,
-    params: AnalysisParams = None,
+    params: AnalysisParams,
 ) -> AudioAnalysis:
-    if params is None:
-        params = AnalysisParams()
     logger.info(f"Analysing  window={params.window}  threshold={params.threshold}dB  min_duration={params.min_duration}s  min_gap={params.min_gap}s  padding={params.padding}s")
     spectrum, freqs, t = compute_spectrogram(data, sample_rate)
 
@@ -65,6 +75,8 @@ def analyze(
     segments = detect_segments(smoothed, t, params.threshold, params.min_duration, params.min_gap, params.padding)
 
     logger.info(f"Analysis complete — {len(segments)} segment(s) found")
+    for i, (start, end) in enumerate(segments):
+        logger.info(f"Segment {i:02d}: {start}s -> {end}s")
     return AudioAnalysis(
         spectrum=spectrum,
         freqs=freqs,

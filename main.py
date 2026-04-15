@@ -1,5 +1,4 @@
 from __future__ import annotations
-import copy
 from dataclasses import dataclass
 import logging
 import os
@@ -23,12 +22,13 @@ class FileSessionData:
 def test_get_file_paths(media_dir, download: False):
     if download:
         init_m4a_file_path, init_file_name = test_download(media_dir)
-        wav_path = file_converter.convert_m4a_to_mono_wav(init_m4a_file_path, media_dir)
+        wav_path = file_converter.convert_m4a_to_mono_wav(init_m4a_file_path, init_file_name, media_dir)
     else:
         init_file_name = os.getenv("TEST_FILE_NAME")
         init_m4a_file_path = str(
             Path(__file__).parent / media_dir / f"{init_file_name}.m4a"
         )
+        # wav_path = file_converter.convert_m4a_to_mono_wav(init_m4a_file_path, init_file_name, media_dir)
         wav_path = str(Path(__file__).parent / media_dir / f"{init_file_name}.wav")
 
     file_name = init_file_name.replace(" ", "_")
@@ -53,8 +53,8 @@ def test_analysis(file_session_data: FileSessionData, sample_rate):
     )
 
 
-def test_process_segments(file_session_data: FileSessionData):
-    analysis = test_analysis(file_session_data)
+def test_process_segments(file_session_data: FileSessionData, sample_rate):
+    analysis = test_analysis(file_session_data, sample_rate)
     process_segments(
         file_session_data.init_m4a_file_path,
         analysis,
@@ -69,9 +69,9 @@ def download_file(download_link, media_dir):
     return file_path, file_name
 
 
-def analyse(wav_path, sample_rate, file_name, session_dir, params: process.AnalysisParams = None):
+def analyse(wav_path, sample_rate, file_name, session_dir, params: process.AnalysisParams = process.AnalysisParams()):
     data = file_converter.read_16bit_to_float(wav_path)
-    analysis = process.analyze(data, sample_rate, params)
+    analysis = process.analyse(data, sample_rate, params)
     plot.plot_data(analysis, data, file_name, session_dir)
     return analysis
 
@@ -93,7 +93,7 @@ def test_compare_window_values(file_session_data, sample_rate):
 
     windows = [1, 100, 200, 400, 600, 800, 1200]
     for window in windows:
-        analysis = process.analyze(data, sample_rate, process.AnalysisParams(
+        analysis = process.analyse(data, sample_rate, process.AnalysisParams(
             window=window,
             threshold=experimental_params.threshold,
             min_duration=experimental_params.min_duration,
@@ -108,7 +108,7 @@ def test_compare_thresholds(file_session_data, sample_rate):
     analyses = []
     data = file_converter.read_16bit_to_float(file_session_data.wav_path)
     for i in range(40, 33, -1):
-        analysis = process.analyze(data, sample_rate, process.AnalysisParams(
+        analysis = process.analyse(data, sample_rate, process.AnalysisParams(
             window=experimental_params.window,
             threshold=i,
             min_duration=experimental_params.min_duration,
@@ -129,10 +129,10 @@ def main():
     )
     media_dir = "media"
     sample_rate = 16000
-    file_session_data = test_get_file_paths(media_dir, download=False)
-    Path(file_session_data.session_dir).mkdir(parents=True, exist_ok=True)
+    # file_session_data = test_get_file_paths(media_dir, download=False)
+    # Path(file_session_data.session_dir).mkdir(parents=True, exist_ok=True)
     # test_analysis(file_session_data, sample_rate)
-    # test_process_segments(file_session_data)
+    # test_process_segments(file_session_data, sample_rate)
     # test_compare_window_values(file_session_data, sample_rate)
     # test_compare_thresholds(file_session_data, sample_rate)
 
