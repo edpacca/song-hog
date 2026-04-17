@@ -81,6 +81,12 @@ def _check_media_dir() -> None:
         raise HTTPException(status_code=503, detail=f"Media directory not writable: {exc}")
 
 
+def _cleanup_intermediate_files(*paths: Path) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)
+        logger.debug("Deleted intermediate file: %s", path)
+
+
 def _enqueue(session_name: str, folder_path: Path) -> None:
     pending = QUEUE_DIR / "pending"
     pending.mkdir(parents=True, exist_ok=True)
@@ -105,7 +111,7 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
 
     try:
         # output_dir is relative to the project root (file_converter prepends __file__.parent)
-        wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
+        wav_path = Path(file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir))
         data = file_converter.read_16bit_to_float(str(wav_path))
         analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env())
     except Exception as exc:
@@ -120,10 +126,21 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
         raise HTTPException(status_code=500, detail=f"Audio analysis/plotting failed: {exc}")
 
     try:
-        file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
+        segment_paths = file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
     except Exception as exc:
         logger.exception("Segment extraction failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
+
+    try:
+        file_converter.convert_m4as_to_mp3s(segment_paths, outdir, session_name)
+    except Exception as exc:
+        logger.exception("MP3 conversion failed: session=%s", session_name)
+        raise HTTPException(status_code=500, detail=f"MP3 conversion failed: {exc}")
+
+    try:
+        _cleanup_intermediate_files(m4a_path, wav_path)
+    except OSError as exc:
+        logger.warning("Cleanup failed: session=%s err=%s", session_name, exc)
 
     try:
         _enqueue(session_name, outdir)
