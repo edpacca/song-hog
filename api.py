@@ -117,7 +117,7 @@ def _create_session_dir(session_name: str) -> Path:
     return outdir
 
 
-def _convert_and_analyze(m4a_path: Path, session_name: str, outdir: Path):
+def _convert_and_analyse(m4a_path: Path, session_name: str, outdir: Path):
     try:
         wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
         data = file_converter.read_16bit_to_float(wav_path)
@@ -149,7 +149,7 @@ def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name
 def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     logger.info("Pipeline start: session=%s m4a=%s", session_name, m4a_path)
     outdir = _create_session_dir(session_name)
-    data, analysis, wav_path = _convert_and_analyze(m4a_path, session_name, outdir)
+    data, analysis, wav_path = _convert_and_analyse(m4a_path, session_name, outdir)
     segments = _plot_and_segment(analysis, data, session_name, outdir)
     _cleanup_intermediate_files(wav_path, session_name=session_name)
     segment_paths = _extract_audio_segments(m4a_path, segments, outdir, session_name)

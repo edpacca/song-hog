@@ -275,7 +275,7 @@ class TestRunPipeline(unittest.TestCase):
         """Test failure when enqueuing job."""
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
-        self._setup_analyze(mock_analyze)
+        self._setup_analyse(mock_analyse)
         mock_enqueue.side_effect = HTTPException(status_code=500, detail="Failed to enqueue job: Queue directory not writable")
 
         m4a_path, session_name = self._get_test_paths()
