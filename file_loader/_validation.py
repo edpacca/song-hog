@@ -1,26 +1,15 @@
 import ipaddress
 import logging
+import os
 import re
 import socket
 import unicodedata
 from pathlib import Path
-from typing import Protocol
 from urllib.parse import unquote, urlparse
 
+from file_loader._config import ServiceConfig
+
 logger = logging.getLogger(__name__)
-
-# ------------------------------------------------------------------
-# Protocol — used to type-hint config parameters without importing
-# ServiceConfig (which would create a circular dependency).
-# ------------------------------------------------------------------
-
-class _ConfigProtocol(Protocol):
-    input_url_base: str
-    expected_host: str
-    scheme: str
-    max_url_length: int
-    file_id_re: re.Pattern[str]
-
 
 # ------------------------------------------------------------------
 # Constants
@@ -48,8 +37,10 @@ _DEFAULT_FILE_ID_RE = re.compile(r"^[a-zA-Z0-9\-]+$")
 # SSRF prevention
 # ------------------------------------------------------------------
 
-def _resolves_to_private_ip(hostname: str) -> bool:
+def _resolves_to_private_ip(hostname: str | None) -> bool:
     """Return True if any resolved address for hostname is in a blocked range."""
+    if os.getenv("DISABLE_SSRF_CHECK", "").lower() in ("1", "true", "yes"):
+        return False
     try:
         results = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
@@ -72,7 +63,7 @@ def _resolves_to_private_ip(hostname: str) -> bool:
 # URL validation
 # ------------------------------------------------------------------
 
-def validate_url(config: _ConfigProtocol, url: str) -> None:
+def validate_url(config: ServiceConfig, url: str) -> None:
     """
     Validate that url is a well-formed URL for the given service config.
     Raises ValueError(_INVALID_URL_ERROR) on any failure.

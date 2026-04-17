@@ -24,6 +24,7 @@ The module-level names used by existing code are re-exported here unchanged:
     file_loader._INVALID_URL_ERROR
 """
 
+from file_loader._config import ServiceConfig
 from file_loader._validation import (
     _INVALID_URL_ERROR,
     extract_file_id,
@@ -32,7 +33,6 @@ from file_loader._validation import (
 from file_loader.downloader import (
     GOOGLE_RECORDER,
     Downloader,
-    ServiceConfig,
     downloader_from_env,
     google_recorder,
 )
