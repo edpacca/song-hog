@@ -108,6 +108,39 @@ class TestResolvesToPrivateIp(unittest.TestCase):
             self.assertTrue(_resolves_to_private_ip("this.does.not.exist"))
 
 
+class TestSsrfBypass(unittest.TestCase):
+    """Test the DISABLE_SSRF_CHECK env var bypass for testing environments."""
+
+    def test_ssrf_check_enabled_by_default(self):
+        """Without the env var, private IPs are blocked."""
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            # Remove the env var if it exists
+            os.environ.pop("DISABLE_SSRF_CHECK", None)
+            with unittest.mock.patch("socket.getaddrinfo", return_value=[(None, None, None, None, ("127.0.0.1", 0))]):
+                self.assertTrue(_resolves_to_private_ip("localhost"))
+
+    def test_ssrf_check_disabled_with_true(self):
+        """With DISABLE_SSRF_CHECK=true, private IPs are allowed."""
+        with unittest.mock.patch.dict(os.environ, {"DISABLE_SSRF_CHECK": "true"}):
+            # Even though localhost resolves to a private IP, the check is bypassed
+            self.assertFalse(_resolves_to_private_ip("localhost"))
+
+    def test_ssrf_check_disabled_with_1(self):
+        """With DISABLE_SSRF_CHECK=1, private IPs are allowed."""
+        with unittest.mock.patch.dict(os.environ, {"DISABLE_SSRF_CHECK": "1"}):
+            self.assertFalse(_resolves_to_private_ip("localhost"))
+
+    def test_ssrf_check_disabled_with_yes(self):
+        """With DISABLE_SSRF_CHECK=yes, private IPs are allowed."""
+        with unittest.mock.patch.dict(os.environ, {"DISABLE_SSRF_CHECK": "yes"}):
+            self.assertFalse(_resolves_to_private_ip("localhost"))
+
+    def test_ssrf_check_disabled_case_insensitive(self):
+        """The bypass value is case-insensitive."""
+        with unittest.mock.patch.dict(os.environ, {"DISABLE_SSRF_CHECK": "TRUE"}):
+            self.assertFalse(_resolves_to_private_ip("localhost"))
+
+
 class TestValidateUrl(unittest.TestCase):
     """Direct unit tests for validate_url using GOOGLE_RECORDER as config."""
 
