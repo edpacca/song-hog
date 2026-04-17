@@ -82,46 +82,59 @@ def _enqueue(session_name: str, folder_path: Path) -> None:
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     job_file = pending / f"{job['id']}.json"
-    job_file.write_text(json.dumps(job, indent=2))
+    try:
+        job_file.write_text(json.dumps(job, indent=2))
+    except Exception as exc:
+        logger.exception("Enqueue failed: session=%s", session_name)
+        raise HTTPException(status_code=500, detail=f"Failed to enqueue job: {exc}")
     logger.info("Enqueued job %s for session=%s", job["id"], session_name)
 
 
-def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
-    logger.info("Pipeline start: session=%s m4a=%s", session_name, m4a_path)
+def _create_session_dir(session_name: str) -> Path:
     outdir = MEDIA_DIR / session_name
     try:
         outdir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise HTTPException(status_code=503, detail=f"Cannot create session directory: {exc}")
+    return outdir
 
+
+def _convert_and_analyze(m4a_path: Path, session_name: str, outdir: Path):
     try:
-        # output_dir is relative to the project root (file_converter prepends __file__.parent)
         wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
         data = file_converter.read_16bit_to_float(str(wav_path))
         analysis = process.analyze(data, SAMPLE_RATE)
     except Exception as exc:
         logger.exception("Audio conversion failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio conversion failed: {exc}")
+    return data, analysis
 
+
+def _plot_and_segment(analysis, data, session_name: str, outdir: Path) -> list:
     try:
         plot.plot_data(analysis, data, session_name, str(outdir), export=True, show=False)
         segments = analysis.segments
     except Exception as exc:
         logger.exception("Audio analysis/plotting failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio analysis/plotting failed: {exc}")
+    return segments
 
+
+def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name: str) -> None:
     try:
         file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
     except Exception as exc:
         logger.exception("Segment extraction failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
 
-    try:
-        _enqueue(session_name, outdir)
-    except Exception as exc:
-        logger.exception("Enqueue failed: session=%s", session_name)
-        raise HTTPException(status_code=500, detail=f"Failed to enqueue job: {exc}")
 
+def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
+    logger.info("Pipeline start: session=%s m4a=%s", session_name, m4a_path)
+    outdir = _create_session_dir(session_name)
+    data, analysis = _convert_and_analyze(m4a_path, session_name, outdir)
+    segments = _plot_and_segment(analysis, data, session_name, outdir)
+    _extract_audio_segments(m4a_path, segments, outdir, session_name)
+    _enqueue(session_name, outdir)
     logger.info("Pipeline complete: session=%s segments=%d", session_name, len(segments))
     return ProcessResponse(
         file_name=session_name,
