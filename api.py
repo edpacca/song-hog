@@ -8,7 +8,8 @@ matplotlib.use("Agg")  # headless, no display required
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import file_converter
@@ -26,6 +27,14 @@ QUEUE_DIR = Path(os.getenv("QUEUE_DIR", str(MEDIA_DIR.parent / "queue")))
 SAMPLE_RATE = 16000
 
 app = FastAPI(title="Song Hog API")
+
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/static/index.html")
+
 
 # Downloader instance — configure via DOWNLOADER_* env vars to target a different service
 _downloader = downloader_from_env()
@@ -72,6 +81,15 @@ def _check_media_dir() -> None:
         raise HTTPException(status_code=503, detail=f"Media directory not writable: {exc}")
 
 
+def _cleanup_intermediate_files(*paths: Path, session_name) -> None:
+    try:
+        for path in paths:
+            path.unlink(missing_ok=True)
+            logger.debug("Deleted intermediate file: %s", path)
+    except OSError as exc:
+        logger.warning("Cleanup failed: session=%s err=%s", session_name, exc)
+
+
 def _enqueue(session_name: str, folder_path: Path) -> None:
     pending = QUEUE_DIR / "pending"
     pending.mkdir(parents=True, exist_ok=True)
@@ -102,12 +120,12 @@ def _create_session_dir(session_name: str) -> Path:
 def _convert_and_analyze(m4a_path: Path, session_name: str, outdir: Path):
     try:
         wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
-        data = file_converter.read_16bit_to_float(str(wav_path))
-        analysis = process.analyze(data, SAMPLE_RATE)
+        data = file_converter.read_16bit_to_float(wav_path)
+        analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env())
     except Exception as exc:
         logger.exception("Audio conversion failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio conversion failed: {exc}")
-    return data, analysis
+    return data, analysis, Path(wav_path)
 
 
 def _plot_and_segment(analysis, data, session_name: str, outdir: Path) -> list:
@@ -120,9 +138,9 @@ def _plot_and_segment(analysis, data, session_name: str, outdir: Path) -> list:
     return segments
 
 
-def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name: str) -> None:
+def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name: str) -> list[str]:
     try:
-        file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
+        return file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
     except Exception as exc:
         logger.exception("Segment extraction failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
@@ -131,9 +149,16 @@ def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name
 def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     logger.info("Pipeline start: session=%s m4a=%s", session_name, m4a_path)
     outdir = _create_session_dir(session_name)
-    data, analysis = _convert_and_analyze(m4a_path, session_name, outdir)
+    data, analysis, wav_path = _convert_and_analyze(m4a_path, session_name, outdir)
     segments = _plot_and_segment(analysis, data, session_name, outdir)
-    _extract_audio_segments(m4a_path, segments, outdir, session_name)
+    _cleanup_intermediate_files(wav_path, session_name=session_name)
+    segment_paths = _extract_audio_segments(m4a_path, segments, outdir, session_name)
+    try:
+        file_converter.convert_m4as_to_mp3s(segment_paths, str(outdir), session_name)
+    except Exception as exc:
+        logger.exception("MP3 conversion failed: session=%s", session_name)
+        raise HTTPException(status_code=500, detail=f"MP3 conversion failed: {exc}")
+    _cleanup_intermediate_files(m4a_path, session_name=session_name)
     _enqueue(session_name, outdir)
     logger.info("Pipeline complete: session=%s segments=%d", session_name, len(segments))
     return ProcessResponse(
@@ -141,7 +166,6 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
         segments=segments,
         segment_count=len(segments),
     )
-
 
 def _download_and_pipeline(url: str) -> ProcessResponse:
     """Download an M4A from `url` into MEDIA_DIR and run the processing pipeline."""

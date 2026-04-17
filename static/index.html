@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Song Hog</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2e3146;
+      --accent: #6c8ef5;
+      --accent-hover: #8aa4ff;
+      --danger: #e05c5c;
+      --text: #e8eaf0;
+      --muted: #7b7f99;
+      --success: #4caf7d;
+      --radius: 12px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+      gap: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding-top: 8px;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .card h2 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    input[type="password"] {
+      display: block;
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 1rem;
+      padding: 12px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      /* Prevent iOS zoom on focus */
+      font-size: max(16px, 1rem);
+    }
+
+    input:focus {
+      border-color: var(--accent);
+    }
+
+    .input-row {
+      margin-bottom: 14px;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 52px;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      margin-top: 4px;
+    }
+
+    .btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn.danger { background: var(--danger); }
+
+    /* Spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Key status badge */
+    .key-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .key-status.set   { background: rgba(76,175,125,0.15); color: var(--success); }
+    .key-status.unset { background: rgba(224,92,92,0.15);  color: var(--danger); }
+
+    /* Results */
+    #result {
+      display: none;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .result-header {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .result-header.ok   { color: var(--success); }
+    .result-header.fail { color: var(--danger); }
+
+    .segment-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .segment-list li {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .seg-index { color: var(--muted); font-size: 0.8rem; }
+    .seg-time  { font-variant-numeric: tabular-nums; color: var(--accent); }
+
+    .meta-line {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .error-box {
+      background: rgba(224,92,92,0.1);
+      border: 1px solid rgba(224,92,92,0.3);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 0.9rem;
+      color: var(--danger);
+      word-break: break-word;
+    }
+
+    /* Tab switcher */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      min-height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .divider {
+      width: 100%;
+      max-width: 520px;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* File input styling */
+    input[type="file"] {
+      display: none;
+    }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 52px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .file-label:hover, .file-label.has-file {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Song Hog</h1>
+    <p>Extract music segments from rehearsal recordings</p>
+  </header>
+
+  <!-- API Key card -->
+  <div class="card">
+    <h2>
+      API Key
+      <span id="key-badge" class="key-status unset">not set</span>
+    </h2>
+    <div class="input-row">
+      <label for="api-key-input">Key (stored for this browser session)</label>
+      <input type="password" id="api-key-input" placeholder="Paste your API key" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="btn" id="save-key-btn" onclick="saveKey()">Save Key</button>
+  </div>
+
+  <!-- Process card -->
+  <div class="card">
+    <h2>Process Recording</h2>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('url')">URL</button>
+      <button class="tab-btn" onclick="switchTab('id')">File ID</button>
+      <button class="tab-btn" onclick="switchTab('upload')">Upload</button>
+    </div>
+
+    <!-- URL tab -->
+    <div class="tab-pane active" id="tab-url">
+      <div class="input-row">
+        <label for="url-input">Google Recorder URL</label>
+        <input type="url" id="url-input"
+               placeholder="https://recorder.google.com/share/..."
+               autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+      <button class="btn" id="url-btn" onclick="submitUrl()">Process URL</button>
+    </div>
+
+    <!-- File ID tab -->
+    <div class="tab-pane" id="tab-id">
+      <div class="input-row">
+        <label for="id-input">Google Recorder File ID</label>
+        <input type="text" id="id-input"
+               placeholder="e.g. 8b37f24d-1be9-40d7-8fb5-b049b106c3a3"
+               autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+      <button class="btn" id="id-btn" onclick="submitId()">Process ID</button>
+    </div>
+
+    <!-- Upload tab -->
+    <div class="tab-pane" id="tab-upload">
+      <div class="input-row">
+        <label>M4A File</label>
+        <label class="file-label" id="file-label" for="file-input">
+          <span id="file-label-text">Tap to choose .m4a file</span>
+        </label>
+        <input type="file" id="file-input" accept=".m4a,audio/mp4" onchange="onFileChange()">
+      </div>
+      <button class="btn" id="upload-btn" onclick="submitUpload()">Upload & Process</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="result"></div>
+
+  <script>
+    // -----------------------------------------------------------------------
+    // API Key management
+    // -----------------------------------------------------------------------
+    const KEY_STORE = 'song_hog_api_key';
+
+    function loadKey() {
+      const k = sessionStorage.getItem(KEY_STORE) || '';
+      document.getElementById('api-key-input').value = k;
+      updateKeyBadge(k);
+      return k;
+    }
+
+    function saveKey() {
+      const k = document.getElementById('api-key-input').value.trim();
+      if (k) {
+        sessionStorage.setItem(KEY_STORE, k);
+      } else {
+        sessionStorage.removeItem(KEY_STORE);
+      }
+      updateKeyBadge(k);
+    }
+
+    function updateKeyBadge(key) {
+      const badge = document.getElementById('key-badge');
+      if (key) {
+        badge.textContent = 'set';
+        badge.className = 'key-status set';
+      } else {
+        badge.textContent = 'not set';
+        badge.className = 'key-status unset';
+      }
+    }
+
+    // Save key on Enter in the key input
+    document.getElementById('api-key-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') saveKey();
+    });
+
+    // -----------------------------------------------------------------------
+    // Tab switching
+    // -----------------------------------------------------------------------
+    function switchTab(name) {
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      event.currentTarget.classList.add('active');
+    }
+
+    // -----------------------------------------------------------------------
+    // File input
+    // -----------------------------------------------------------------------
+    function onFileChange() {
+      const input = document.getElementById('file-input');
+      const label = document.getElementById('file-label');
+      const text  = document.getElementById('file-label-text');
+      if (input.files.length > 0) {
+        text.textContent = input.files[0].name;
+        label.classList.add('has-file');
+      } else {
+        text.textContent = 'Tap to choose .m4a file';
+        label.classList.remove('has-file');
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared: show loading / restore button
+    // -----------------------------------------------------------------------
+    function setLoading(btnId, loading) {
+      const btn = document.getElementById(btnId);
+      if (loading) {
+        btn._label = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div><span>Processing…</span>';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = btn._label || btn.innerHTML;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared: render result
+    // -----------------------------------------------------------------------
+    function showResult(data, error) {
+      const el = document.getElementById('result');
+      el.style.display = 'block';
+
+      if (error) {
+        el.innerHTML = `
+          <div class="card">
+            <div class="result-header fail">Processing failed</div>
+            <div class="error-box">${escHtml(error)}</div>
+          </div>`;
+        return;
+      }
+
+      const segs = data.segments || [];
+      const items = segs.map((s, i) => `
+        <li>
+          <span class="seg-index">Segment ${i + 1}</span>
+          <span class="seg-time">${fmtTime(s[0])} – ${fmtTime(s[1])}</span>
+        </li>`).join('');
+
+      el.innerHTML = `
+        <div class="card">
+          <div class="result-header ok">Done — ${segs.length} segment${segs.length !== 1 ? 's' : ''} found</div>
+          <div class="meta-line">${escHtml(data.file_name)}</div>
+          ${segs.length > 0
+            ? `<ul class="segment-list">${items}</ul>`
+            : `<p style="color:var(--muted);font-size:.9rem">No segments detected above threshold.</p>`}
+        </div>`;
+    }
+
+    function fmtTime(sec) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+      return `${m}:${pad(s)}`;
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // -----------------------------------------------------------------------
+    // API calls
+    // -----------------------------------------------------------------------
+    function apiKey() {
+      return sessionStorage.getItem(KEY_STORE) || '';
+    }
+
+    async function callApi(endpoint, bodyObj, btnId) {
+      const key = apiKey();
+      if (!key) {
+        showResult(null, 'API key not set. Enter and save your key above.');
+        return;
+      }
+
+      setLoading(btnId, true);
+      document.getElementById('result').style.display = 'none';
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': key,
+          },
+          body: JSON.stringify(bodyObj),
+        });
+
+        const json = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          const msg = json?.detail || `HTTP ${res.status}`;
+          showResult(null, msg);
+        } else {
+          showResult(json, null);
+        }
+      } catch (err) {
+        showResult(null, 'Network error: ' + err.message);
+      } finally {
+        setLoading(btnId, false);
+      }
+    }
+
+    function submitUrl() {
+      const url = document.getElementById('url-input').value.trim();
+      if (!url) { showResult(null, 'Please enter a URL.'); return; }
+      callApi('/process/url', { url }, 'url-btn');
+    }
+
+    function submitId() {
+      const file_id = document.getElementById('id-input').value.trim();
+      if (!file_id) { showResult(null, 'Please enter a file ID.'); return; }
+      callApi('/process/id', { file_id }, 'id-btn');
+    }
+
+    async function submitUpload() {
+      const input = document.getElementById('file-input');
+      if (!input.files.length) { showResult(null, 'Please select an .m4a file.'); return; }
+
+      const key = apiKey();
+      if (!key) { showResult(null, 'API key not set. Enter and save your key above.'); return; }
+
+      setLoading('upload-btn', true);
+      document.getElementById('result').style.display = 'none';
+
+      const form = new FormData();
+      form.append('file', input.files[0]);
+
+      try {
+        const res = await fetch('/process/upload', {
+          method: 'POST',
+          headers: { 'X-API-Key': key },
+          body: form,
+        });
+
+        const json = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          showResult(null, json?.detail || `HTTP ${res.status}`);
+        } else {
+          showResult(json, null);
+        }
+      } catch (err) {
+        showResult(null, 'Network error: ' + err.message);
+      } finally {
+        setLoading('upload-btn', false);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------------------
+    loadKey();
+  </script>
+
+</body>
+</html>
