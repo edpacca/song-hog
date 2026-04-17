@@ -93,6 +93,18 @@ DOWNLOADER_FILE_ID_RE=^[a-zA-Z0-9\-]+$
 DOWNLOADER_DOWNLOAD_URL_RE=^https://api\.myservice\.com/download/[a-zA-Z0-9\-]+$
 ```
 
+## Unit Tests
+```bash
+# Run all tests
+.venv/Scripts/python -m unittest discover -s tests -v
+
+# Run tests from a single file
+.venv/Scripts/python -m unittest tests.test_validation -v
+
+# Run a single test case
+.venv/Scripts/python -m unittest tests.test_validation.TestExtractFileId.test_extracts_id
+```
+
 ## API Test Client
 
 `api_test.py` is a CLI tool for hitting the API endpoints from the terminal. It loads credentials from `.env` by default. Just a nice way of manually checking everything is working locally without crafting curl commands.
