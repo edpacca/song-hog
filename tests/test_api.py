@@ -276,7 +276,7 @@ class TestRunPipeline(unittest.TestCase):
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
         self._setup_analyze(mock_analyze)
-        mock_enqueue.side_effect = OSError("Queue directory not writable")
+        mock_enqueue.side_effect = HTTPException(status_code=500, detail="Failed to enqueue job: Queue directory not writable")
 
         m4a_path, session_name = self._get_test_paths()
 
@@ -380,8 +380,10 @@ class TestEnqueue(unittest.TestCase):
         session_name, folder_path = self._get_test_inputs()
 
         # Execute and assert
-        with self.assertRaises(IOError):
+        with self.assertRaises(HTTPException) as ctx:
             _enqueue(session_name, folder_path)
+        self.assertEqual(ctx.exception.status_code, 500)
+        self.assertIn("Failed to enqueue job", ctx.exception.detail)
 
     @patch('api.datetime')
     @patch('api.uuid')
