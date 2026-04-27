@@ -120,7 +120,7 @@ def _create_session_dir(session_name: str) -> Path:
 def _convert_and_analyse(m4a_path: Path, session_name: str, outdir: Path):
     try:
         wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
-        data = file_converter.read_16bit_to_float(wav_path)
+        data = file_converter.read_wav_as_float(wav_path)
         analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env())
     except Exception as exc:
         logger.exception("Audio conversion failed: session=%s", session_name)
@@ -151,6 +151,7 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     outdir = _create_session_dir(session_name)
     data, analysis, wav_path = _convert_and_analyse(m4a_path, session_name, outdir)
     segments = _plot_and_segment(analysis, data, session_name, outdir)
+    del data, analysis
     _cleanup_intermediate_files(wav_path, session_name=session_name)
     segment_paths = _extract_audio_segments(m4a_path, segments, outdir, session_name)
     try:

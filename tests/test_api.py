@@ -67,7 +67,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_success(
@@ -124,7 +124,7 @@ class TestRunPipeline(unittest.TestCase):
         self._assert_http_exception(ctx, 503, "Cannot create session directory")
         mock_convert.assert_not_called()
 
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_convert_failure(
@@ -146,7 +146,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_read.assert_not_called()
 
     @patch('api.process.analyse')
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_read_failure(
@@ -171,7 +171,7 @@ class TestRunPipeline(unittest.TestCase):
 
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_analyse_failure(
@@ -198,7 +198,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_plot_failure(
@@ -228,7 +228,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_extract_failure(
@@ -259,7 +259,7 @@ class TestRunPipeline(unittest.TestCase):
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
-    @patch('api.file_converter.read_16bit_to_float')
+    @patch('api.file_converter.read_wav_as_float')
     @patch('api.file_converter.convert_m4a_to_mono_wav')
     @patch('api.MEDIA_DIR')
     def test_run_pipeline_enqueue_failure(
