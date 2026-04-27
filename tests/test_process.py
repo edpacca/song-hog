@@ -1,7 +1,7 @@
 import os
 import unittest
 import process
-from file_converter import read_16bit_to_float
+from file_converter import read_wav_as_float
 
 TEST_WAVE = os.path.join(
     os.path.dirname(__file__), "..", "static", "test_wave_LISTENING_NOT_RECOMMENDED.wav"
@@ -35,7 +35,7 @@ EXPECTED_SEGMENTS_SECONDS = [
 class TestanalyseWithTestWave(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.data = read_16bit_to_float(TEST_WAVE)
+        cls.data = read_wav_as_float(TEST_WAVE)
         cls.sample_rate = 16000
 
     def test_segment_count(self):

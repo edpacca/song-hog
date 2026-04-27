@@ -70,7 +70,7 @@ def download_file(download_link, media_dir):
 
 
 def analyse(wav_path, sample_rate, file_name, session_dir, params: process.AnalysisParams = process.AnalysisParams()):
-    data = file_converter.read_16bit_to_float(wav_path)
+    data = file_converter.read_wav_as_float(wav_path)
     analysis = process.analyse(data, sample_rate, params)
     plot.plot_data(analysis, data, file_name, session_dir)
     return analysis
@@ -89,7 +89,7 @@ experimental_params = process.AnalysisParams(400, 35, 40, 20, 5)
 # Experiments - tweaking parameters
 def test_compare_window_values(file_session_data, sample_rate):
     analyses = []
-    data = file_converter.read_16bit_to_float(file_session_data.wav_path)
+    data = file_converter.read_wav_as_float(file_session_data.wav_path)
 
     windows = [1, 100, 200, 400, 600, 800, 1200]
     for window in windows:
@@ -106,7 +106,7 @@ def test_compare_window_values(file_session_data, sample_rate):
 
 def test_compare_thresholds(file_session_data, sample_rate):
     analyses = []
-    data = file_converter.read_16bit_to_float(file_session_data.wav_path)
+    data = file_converter.read_wav_as_float(file_session_data.wav_path)
     for i in range(40, 33, -1):
         analysis = process.analyse(data, sample_rate, process.AnalysisParams(
             window=experimental_params.window,

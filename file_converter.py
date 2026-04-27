@@ -3,39 +3,27 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 import wave
-import struct
 from typing import Sequence
 
+import numpy as np
 import ffmpeg
 
 
-def normalise_16bit(data: Sequence[int]) -> list[float]:
-    """Normalise a sequence of 16-bit signed integers to the range [0.0, 1.0].
+def read_wav_as_float(path: str) -> np.ndarray:
+    """Read a 16-bit WAV file and return sample data as a float32 numpy array.
 
-    Args:
-        data: Sequence of 16-bit integer sample values.
-
-    Returns:
-        List of normalised float values.
-    """
-    return [abs(float(value) / pow(2, 15)) for value in data]
-
-
-def read_16bit_to_float(path: str) -> tuple[int, ...]:
-    """Read a 16-bit WAV file and return raw sample data as unpacked integers.
-
-    Args:
-        path: Path to the WAV file.
-
-    Returns:
-        Tuple of signed 16-bit integer sample values (all channels interleaved).
+    Values are in the original int16 range (-32768 to 32767) to preserve
+    the dB scale used by the analysis thresholds.
     """
     logger.info(f"Reading file: {path}")
-    wave_read = wave.open(path)
-    frames = wave_read.getnframes()
-    chunks = wave_read.readframes(frames)
-    channels = wave_read.getnchannels()
-    return struct.unpack("%ih" % (frames * channels), chunks)
+    with wave.open(path) as wf:
+        frames = wf.getnframes()
+        channels = wf.getnchannels()
+        raw = wf.readframes(frames)
+    data = np.frombuffer(raw, dtype=np.int16)
+    if channels > 1:
+        data = data.reshape(-1, channels).mean(axis=1).astype(np.int16)
+    return data.astype(np.float32)
 
 
 def convert_m4a_to_mono_wav(m4a_path: str, file_name: str, output_dir: str, sample_rate: int = 16000) -> str:
