@@ -7,7 +7,7 @@ import numpy as np
 
 from benchmark import measure
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("song_hog.process")
 
 
 @dataclass
