@@ -9,6 +9,8 @@ The API harness is fairly specifically tailored to my use-case with Ggl recordin
 - Convert audio file to a mono 16bit wave and extract the amplitude data.
     - The quality doesn't matter too much as we chop up the original anyway
 - Create a spectrogram via a fourier transform, sampling a sensible window
+    - initially used matplotlib.mlab.specgram loaded everything into memeory before calculating
+    - now uses same methods but streams data instead to prevent capping out the memory usage when deployed
 - Get the mean intensities as function of time
 - Smooth out the line to your taste
 - Find segments of audio above a particular threshold, over a particular amount of time
@@ -92,6 +94,20 @@ DOWNLOADER_DOWNLOAD_URL_BASE=https://api.myservice.com/download/
 DOWNLOADER_FILE_ID_RE=^[a-zA-Z0-9\-]+$
 DOWNLOADER_DOWNLOAD_URL_RE=^https://api\.myservice\.com/download/[a-zA-Z0-9\-]+$
 ```
+
+## Benchmarking
+
+`benchmark_runner.py` runs the full processing pipeline on a single M4A file and reports per-function memory and timing via the `@measure` decorator (applied to `read_wav_as_float`, `compute_spectrogram`, and `analyse`). Each log line shows wall time, peak RSS (resident set size == RAM usage!) during the call, RSS before/after, and the net delta.
+
+```bash
+# Basic run — decorator output appears in stdout logs
+.venv/bin/python benchmark_runner.py media/session.m4a [output_dir]
+
+# Full process benchmark with OS-level peak RSS (requires GNU time)
+/usr/bin/time -v .venv/bin/python benchmark_runner.py media/session.m4a
+```
+
+> **Note on peak vs delta:** `peak` is the maximum RSS observed during the call, including temporary allocations that are freed before the function returns. `delta` is the net retained memory (after − before). A large gap between the two (as seen in `compute_spectrogram`) means significant transient allocations are happening internally — these are the target for memory optimisation.
 
 ## Unit Tests
 ```bash
