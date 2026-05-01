@@ -117,11 +117,14 @@ def _create_session_dir(session_name: str) -> Path:
     return outdir
 
 
+ENABLE_PLOT = os.getenv("ENABLE_PLOT", "0") == "1"
+
+
 def _convert_and_analyse(m4a_path: Path, session_name: str, outdir: Path):
     try:
         wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
         data = file_converter.read_wav_as_float(wav_path)
-        analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env())
+        analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env(), include_spectrum=ENABLE_PLOT)
     except Exception as exc:
         logger.exception("Audio conversion failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio conversion failed: {exc}")
@@ -130,7 +133,8 @@ def _convert_and_analyse(m4a_path: Path, session_name: str, outdir: Path):
 
 def _plot_and_segment(analysis, data, session_name: str, outdir: Path) -> list:
     try:
-        plot.plot_data(analysis, data, session_name, str(outdir), export=True, show=False)
+        if ENABLE_PLOT:
+            plot.plot_data(analysis, data, session_name, str(outdir), export=True, show=False)
         segments = analysis.segments
     except Exception as exc:
         logger.exception("Audio analysis/plotting failed: session=%s", session_name)
