@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
+from benchmark import measure
 import colors
 
 spectrogram_cmap = LinearSegmentedColormap.from_list(
@@ -13,7 +14,7 @@ spectrogram_cmap = LinearSegmentedColormap.from_list(
 )
 from process import AudioAnalysis
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("song_hog.plot")
 
 
 def set_axes_colors(ax):
@@ -85,7 +86,7 @@ def subplot_segements(
             subplot.axvspan(start, start + padding, alpha=alpha, color=padding_color)
             subplot.axvspan(end - padding, end, alpha=alpha, color=padding_color)
 
-
+@measure
 def plot_data(
     analysis: AudioAnalysis,
     data,

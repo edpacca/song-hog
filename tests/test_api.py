@@ -101,7 +101,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_convert.assert_called_once_with(str(m4a_path), session_name, mock_outdir)
         mock_read.assert_called_once_with("/path/to/output.wav")
         mock_analyse.assert_called_once()
-        mock_plot.assert_called_once()
+        mock_plot.assert_not_called()
         mock_extract.assert_called_once()
         mock_enqueue.assert_called_once_with(session_name, mock_outdir)
 
@@ -195,6 +195,7 @@ class TestRunPipeline(unittest.TestCase):
         self._assert_http_exception(ctx, 500, "Audio conversion failed")
         mock_plot.assert_not_called()
 
+    @patch('api.ENABLE_PLOT', "1")
     @patch('api.file_converter.extract_m4a_segments')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
@@ -210,7 +211,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_plot,
         mock_extract,
     ):
-        """Test failure during plotting."""
+        """Test failure during plotting when ENABLE_PLOT=true."""
         self._setup_mock_outdir(mock_media_dir)
         self._setup_convert_and_read(mock_convert, mock_read)
         self._setup_analyse(mock_analyse)

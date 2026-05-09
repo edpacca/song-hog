@@ -1,14 +1,29 @@
 import logging
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("song_hog.file_converter")
 import wave
 from typing import Sequence
 
 import numpy as np
+import re
 import ffmpeg
 
+from benchmark import measure
 
+
+def _run_ffmpeg(stream) -> None:
+    _, stderr = stream.global_args("-hide_banner").run(capture_stderr=True)
+    # hack around ffmpeg verbosity - only print final output audio summary
+    for line in stderr.decode().splitlines():
+        if "muxing overhead" in line:
+            bracket = re.search(r'\[.*?\]', line)
+            audio = re.search(r'audio:\S+', line)
+            overhead = re.search(r'muxing overhead: \S+', line)
+            logger.info(" ".join(m.group() for m in [bracket, audio, overhead] if m))
+
+
+@measure
 def read_wav_as_float(path: str) -> np.ndarray:
     """Read a 16-bit WAV file and return sample data as a float32 numpy array.
 
@@ -40,7 +55,7 @@ def convert_m4a_to_mono_wav(m4a_path: str, file_name: str, output_dir: str, samp
     """
     output_path = Path(output_dir) / f"{file_name}.wav"
     logger.info(f"Converting {m4a_path} to mono WAV at {sample_rate}Hz -> {output_path}")
-    ffmpeg.input(m4a_path).output(str(output_path), ac=1, ar=sample_rate).run()
+    _run_ffmpeg(ffmpeg.input(m4a_path).output(str(output_path), ac=1, ar=sample_rate))
     return str(output_path)
 
 
@@ -60,7 +75,7 @@ def extract_m4a_segments(m4a_path: str, t_segments: Sequence[tuple[float, float]
     for i, (start, end) in enumerate(t_segments):
         out_path = output_dir / f"segment_{i:02d}.m4a"
         logger.info(f"Extracting segment {i:02d}: {start}s -> {end}s to {out_path}")
-        ffmpeg.input(m4a_path, ss=start, to=end).output(str(out_path), c='copy').run(quiet=True)
+        _run_ffmpeg(ffmpeg.input(m4a_path, ss=start, to=end).output(str(out_path), c='copy'))
         paths.append(str(out_path))
     return paths
 
@@ -81,7 +96,7 @@ def convert_m4as_to_mp3s(m4a_paths: list[str], output_dir: str, base_name: str) 
     for i, m4a_path in enumerate(m4a_paths):
         out_path = output_dir / f"{base_name}_segment_{i:02d}.mp3"
         logger.info(f"Converting {m4a_path} to MP3 -> {out_path}")
-        ffmpeg.input(m4a_path).output(str(out_path)).run(quiet=True)
+        _run_ffmpeg(ffmpeg.input(m4a_path).output(str(out_path)))
         Path(m4a_path).unlink()
         logger.debug(f"Deleted source file: {m4a_path}")
         paths.append(str(out_path))

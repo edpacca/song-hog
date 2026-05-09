@@ -1,12 +1,13 @@
 import logging
 import os
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
-from matplotlib.mlab import specgram as mlab_specgram
 
-logger = logging.getLogger(__name__)
+from benchmark import measure
+
+logger = logging.getLogger("song_hog.process")
 
 
 @dataclass
@@ -25,7 +26,7 @@ class AnalysisParams:
 
 @dataclass
 class AudioAnalysis:
-    spectrum: np.ndarray  # linear power, shape (freqs, time_bins)
+    spectrum: Optional[np.ndarray]  # linear power, shape (freqs, time_bins), or None when plotting disabled
     freqs: np.ndarray
     t: np.ndarray
     intensity_db: np.ndarray  # avg, log-transformed, clamped
@@ -46,27 +47,53 @@ def params_from_env() -> AnalysisParams:
     )
 
 
-def compute_spectrogram(
+@measure
+def compute_mean_intensity(
     data: np.ndarray,
     sample_rate: int,
     NFFT: int = 1024,
     noverlap: int = 512,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    spectrum, freqs, t = mlab_specgram(
-        data, Fs=sample_rate, NFFT=NFFT, noverlap=noverlap
-    )
-    return spectrum, freqs, t
+    include_spectrum: bool = False,
+) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, np.ndarray]:
+    """Streaming Short Time Fourier Transform (STFT): computes mean power per time bin without loading the full 2D spectrum into memory.
+
+    Matches mlab_specgram normalization: Hanning window, PSD scaling
+    (Fs * sum(w²)), one-sided doubling for non-DC/Nyquist bins.
+    """
+    hop = NFFT - noverlap
+    hann = np.hanning(NFFT)
+    norm = sample_rate * float(np.dot(hann, hann))
+
+    n_windows = (len(data) - noverlap) // hop
+    freqs = np.fft.rfftfreq(NFFT, 1.0 / sample_rate)
+    t = (np.arange(n_windows) * hop + NFFT // 2) / sample_rate
+
+    spectrum = np.empty((len(freqs), n_windows)) if include_spectrum else None
+    avg_intensity = np.empty(n_windows)
+
+    for i in range(n_windows):
+        start = i * hop
+        power = np.abs(np.fft.rfft(data[start:start + NFFT] * hann, n=NFFT)) ** 2 / norm
+        power[1:-1] *= 2
+        if include_spectrum:
+            spectrum[:, i] = power
+        avg_intensity[i] = power.mean()
+
+    return avg_intensity, spectrum, freqs, t
 
 
+@measure
 def analyse(
     data: np.ndarray,
     sample_rate: int,
     params: AnalysisParams,
+    include_spectrum: bool = False,
 ) -> AudioAnalysis:
     logger.info(f"Analysing  window={params.window}  threshold={params.threshold}dB  min_duration={params.min_duration}s  min_gap={params.min_gap}s  padding={params.padding}s")
-    spectrum, freqs, t = compute_spectrogram(data, sample_rate)
+    avg_intensity, spectrum, freqs, t = compute_mean_intensity(
+        data, sample_rate, include_spectrum=include_spectrum
+    )
 
-    avg_intensity = spectrum.mean(axis=0)
     avg_intensity[avg_intensity == 0] = 1e-10
     avg_intensity_db = 10 * np.log10(avg_intensity)
     avg_intensity_db[avg_intensity_db < 0] = 0
