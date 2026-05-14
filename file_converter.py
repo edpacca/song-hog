@@ -70,10 +70,10 @@ def extract_m4a_segments(m4a_path: str, t_segments: Sequence[tuple[float, float]
     Returns:
         List of paths to the extracted segment files.
     """
-    output_dir = Path(output_dir)
+    output_dirpath = Path(output_dir)
     paths = []
     for i, (start, end) in enumerate(t_segments):
-        out_path = output_dir / f"segment_{i:02d}.m4a"
+        out_path = output_dirpath / f"segment_{i:02d}.m4a"
         logger.info(f"Extracting segment {i:02d}: {start}s -> {end}s to {out_path}")
         _run_ffmpeg(ffmpeg.input(m4a_path, ss=start, to=end).output(str(out_path), c='copy'))
         paths.append(str(out_path))
@@ -91,10 +91,10 @@ def convert_m4as_to_mp3s(m4a_paths: list[str], output_dir: str, base_name: str) 
     Returns:
         List of paths to the created MP3 files.
     """
-    output_dir = Path(output_dir)
+    output_dirpath = Path(output_dir)
     paths = []
     for i, m4a_path in enumerate(m4a_paths):
-        out_path = output_dir / f"{base_name}_segment_{i:02d}.mp3"
+        out_path = output_dirpath / f"{base_name}_segment_{i:02d}.mp3"
         logger.info(f"Converting {m4a_path} to MP3 -> {out_path}")
         _run_ffmpeg(ffmpeg.input(m4a_path).output(str(out_path)))
         Path(m4a_path).unlink()

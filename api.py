@@ -122,7 +122,7 @@ ENABLE_PLOT = os.getenv("ENABLE_PLOT", "0") == "1"
 
 def _convert_and_analyse(m4a_path: Path, session_name: str, outdir: Path):
     try:
-        wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, outdir)
+        wav_path = file_converter.convert_m4a_to_mono_wav(str(m4a_path), session_name, str(outdir))
         data = file_converter.read_wav_as_float(wav_path)
         analysis = process.analyse(data, SAMPLE_RATE, process.params_from_env(), include_spectrum=ENABLE_PLOT)
     except Exception as exc:
@@ -144,7 +144,7 @@ def _plot_and_segment(analysis, data, session_name: str, outdir: Path) -> list:
 
 def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name: str) -> list[str]:
     try:
-        return file_converter.extract_m4a_segments(str(m4a_path), segments, outdir)
+        return file_converter.extract_m4a_segments(str(m4a_path), segments, str(outdir))
     except Exception as exc:
         logger.exception("Segment extraction failed: session=%s", session_name)
         raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
