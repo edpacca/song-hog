@@ -8,16 +8,19 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2e3146;
-      --accent: #6c8ef5;
-      --accent-hover: #8aa4ff;
-      --danger: #e05c5c;
-      --text: #e8eaf0;
-      --muted: #7b7f99;
-      --success: #4caf7d;
-      --radius: 12px;
+      --bg: #181825;
+      --surface: #313244;
+      --surface-1: #585b70;
+      --border: #585b70;
+      --accent: #94e2d5;
+      --accent-hover: #89dceb;
+      --danger: #f38ba8;
+      --danger-50: #f38ba846;
+      --text: #cdd6f4;
+      --muted: #9399b2;
+      --success: #a6e3a1;
+      --success-50: #a6e3a13d;
+      --radius: 6px;
       --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
@@ -93,6 +96,7 @@
       padding: 12px 14px;
       outline: none;
       transition: border-color 0.15s;
+      min-height: 4rem;
       /* Prevent iOS zoom on focus */
       font-size: max(16px, 1rem);
     }
@@ -114,8 +118,8 @@
       min-height: 52px;
       border: none;
       border-radius: 8px;
-      background: var(--accent);
-      color: #fff;
+      background: var(--surface-1);
+      color: var(--text);
       font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
@@ -124,7 +128,10 @@
       margin-top: 4px;
     }
 
-    .btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn:hover:not(:disabled) {
+      background: var(--accent);
+      color: var(--surface);
+    }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .btn.danger { background: var(--danger); }
@@ -152,8 +159,8 @@
       margin-left: 8px;
       vertical-align: middle;
     }
-    .key-status.set   { background: rgba(76,175,125,0.15); color: var(--success); }
-    .key-status.unset { background: rgba(224,92,92,0.15);  color: var(--danger); }
+    .key-status.set   { background: var(--success-50); color: var(--success); }
+    .key-status.unset { background: var(--danger-50);  color: var(--danger); }
 
     /* Results */
     #result {
@@ -230,9 +237,8 @@
     }
 
     .tab-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
+      background: var(--surface-1);
+      color: var(--text);
     }
 
     .tab-pane { display: none; }
