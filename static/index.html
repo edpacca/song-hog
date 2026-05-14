@@ -58,6 +58,14 @@
       margin-top: 4px;
     }
 
+    #health-status {
+      font-size: 0.8rem;
+      margin-top: 6px;
+      color: var(--muted);
+    }
+    #health-status.ok   { color: var(--success); }
+    #health-status.fail { color: var(--danger); }
+
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -284,6 +292,7 @@
   <header>
     <h1>Song Hog</h1>
     <p>Extract music segments from rehearsal recordings</p>
+    <p id="health-status"></p>
   </header>
 
   <!-- API Key card -->
@@ -567,9 +576,30 @@
     }
 
     // -----------------------------------------------------------------------
+    // Health check
+    // -----------------------------------------------------------------------
+    async function checkHealth() {
+      const el = document.getElementById('health-status');
+      try {
+        const res = await fetch('/health');
+        if (res.ok) {
+          el.textContent = '✅ Server reachable';
+          el.className = 'ok';
+        } else {
+          el.textContent = `❌ Server error (${res.status})`;
+          el.className = 'fail';
+        }
+      } catch {
+        el.textContent = '❌ Server unreachable';
+        el.className = 'fail';
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Init
     // -----------------------------------------------------------------------
     loadKey();
+    checkHealth();
   </script>
 
 </body>
