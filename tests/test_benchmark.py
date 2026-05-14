@@ -27,7 +27,10 @@ def setUpModule():
 def tearDownModule():
     logging.disable(logging.NOTSET)
 
-
+"""
+Note these tests will fail if not run on a linux system.
+They read /proc/self/status for RAM consumption metrics which will not be available on another OS.
+"""
 class TestMeasureDecorator(unittest.TestCase):
 
     def setUp(self):
