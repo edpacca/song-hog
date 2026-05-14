@@ -22,6 +22,8 @@ from api import (
     _enqueue,
     _check_media_dir,
     _download_and_pipeline,
+    _apply_project_id,
+    get_project_ids,
     process_url,
     process_id,
     process_upload,
@@ -98,7 +100,7 @@ class TestRunPipeline(unittest.TestCase):
 
         # Verify all external functions were called
         mock_outdir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-        mock_convert.assert_called_once_with(str(m4a_path), session_name, mock_outdir)
+        mock_convert.assert_called_once_with(str(m4a_path), session_name, str(mock_outdir))
         mock_read.assert_called_once_with("/path/to/output.wav")
         mock_analyse.assert_called_once()
         mock_plot.assert_not_called()
@@ -600,7 +602,7 @@ class TestProcessUrlEndpoint(unittest.TestCase):
         result = process_url(body, _="test-key")
 
         self.assertIsInstance(result, ProcessResponse)
-        mock_pipeline.assert_called_once_with("https://example.com/file.m4a")
+        mock_pipeline.assert_called_once_with("https://example.com/file.m4a", None)
 
     @patch('api._download_and_pipeline')
     def test_process_url_download_failure(self, mock_pipeline):
@@ -643,7 +645,7 @@ class TestProcessIdEndpoint(unittest.TestCase):
         result = process_id(body, _="test-key")
 
         self.assertIsInstance(result, ProcessResponse)
-        mock_pipeline.assert_called_once_with("https://recorder.google.com/share/abc123")
+        mock_pipeline.assert_called_once_with("https://recorder.google.com/share/abc123", None)
 
     @patch('api._download_and_pipeline')
     @patch('api._downloader')
@@ -654,7 +656,7 @@ class TestProcessIdEndpoint(unittest.TestCase):
 
         process_id(IdRequest(file_id="xyz789"), _="test-key")
 
-        mock_pipeline.assert_called_once_with("https://base.url/xyz789")
+        mock_pipeline.assert_called_once_with("https://base.url/xyz789", None)
 
     @patch('api._download_and_pipeline')
     @patch('api._downloader')
@@ -684,7 +686,7 @@ class TestProcessUploadEndpoint(unittest.TestCase):
 
     def _run_upload(self, mock_file):
         """Run the async process_upload coroutine synchronously."""
-        return asyncio.run(process_upload(file=mock_file, _="test-key"))
+        return asyncio.run(process_upload(file=mock_file, project_id=None, _="test-key"))
 
     @patch('api._run_pipeline')
     @patch('api._check_media_dir')
@@ -772,6 +774,249 @@ class TestProcessUploadEndpoint(unittest.TestCase):
         self._run_upload(mock_file)
 
         mock_run_pipeline.assert_called_once_with(mock_m4a_path, "band_rehearsal_01")
+
+
+class TestApplyProjectId(unittest.TestCase):
+    """Tests for _apply_project_id helper."""
+
+    def _assert_http_exception(self, ctx, status_code, message_substring):
+        self.assertEqual(ctx.exception.status_code, status_code)
+        self.assertIn(message_substring, ctx.exception.detail)
+
+    def test_no_project_id_returns_unchanged(self):
+        """None project_id returns session_name unchanged."""
+        self.assertEqual(_apply_project_id("rehearsal", None), "rehearsal")
+
+    @patch('api.PROJECT_IDS', [])
+    def test_project_id_appended_when_not_in_name(self):
+        """project_id not present in name gets appended with underscore."""
+        self.assertEqual(_apply_project_id("rehearsal", "square"), "rehearsal_square")
+
+    @patch('api.PROJECT_IDS', [])
+    def test_project_id_not_appended_when_already_in_name_exact(self):
+        """project_id already in name (exact) — no double-append."""
+        self.assertEqual(_apply_project_id("rehearsal_square", "square"), "rehearsal_square")
+
+    @patch('api.PROJECT_IDS', [])
+    def test_project_id_not_appended_when_already_in_name_case_insensitive(self):
+        """project_id already in name (different case) — no double-append."""
+        self.assertEqual(_apply_project_id("Square_rehearsal", "square"), "Square_rehearsal")
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    def test_conflicting_project_id_raises_400(self):
+        """File name containing a different configured project_id raises 400."""
+        with self.assertRaises(HTTPException) as ctx:
+            _apply_project_id("triangle_rehearsal", "square")
+        self._assert_http_exception(ctx, 400, "conflicts with requested project id")
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    def test_conflict_detection_case_insensitive(self):
+        """Conflict detection is case-insensitive."""
+        with self.assertRaises(HTTPException) as ctx:
+            _apply_project_id("TRIANGLE_rehearsal", "square")
+        self._assert_http_exception(ctx, 400, "conflicts with requested project id")
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    def test_no_conflict_when_name_matches_requested_id(self):
+        """Name containing the *requested* project_id is not a conflict."""
+        result = _apply_project_id("square_rehearsal", "square")
+        self.assertEqual(result, "square_rehearsal")
+
+    @patch('api.PROJECT_IDS', [])
+    def test_no_conflict_when_project_ids_empty(self):
+        """No configured project_ids means no conflict check is possible."""
+        result = _apply_project_id("triangle_rehearsal", "square")
+        self.assertEqual(result, "triangle_rehearsal_square")
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    def test_error_message_names_the_conflicting_id(self):
+        """Error detail names the conflicting project_id found in the file name."""
+        with self.assertRaises(HTTPException) as ctx:
+            _apply_project_id("triangle_session", "square")
+        self.assertIn("triangle", ctx.exception.detail)
+        self.assertIn("square", ctx.exception.detail)
+
+
+class TestGetProjectIdsEndpoint(unittest.TestCase):
+    """Tests for GET /project-ids endpoint."""
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    def test_returns_configured_ids(self):
+        """Returns configured project IDs."""
+        result = get_project_ids()
+        self.assertEqual(result, {"project_ids": ["square", "triangle"]})
+
+    @patch('api.PROJECT_IDS', [])
+    def test_returns_empty_list_when_none_configured(self):
+        """Returns empty list when PROJECT_IDS not set."""
+        result = get_project_ids()
+        self.assertEqual(result, {"project_ids": []})
+
+
+class TestProcessUrlProjectId(unittest.TestCase):
+    """Tests for project_id handling through /process/url."""
+
+    def _make_process_response(self):
+        return ProcessResponse(file_name="session", segments=[(0.0, 1.5)], segment_count=1)
+
+    @patch('api._download_and_pipeline')
+    def test_project_id_passed_to_pipeline(self, mock_pipeline):
+        """project_id from request body is forwarded to _download_and_pipeline."""
+        mock_pipeline.return_value = self._make_process_response()
+        body = UrlRequest(url="https://example.com/file.m4a", project_id="square")
+
+        process_url(body, _="test-key")
+
+        mock_pipeline.assert_called_once_with("https://example.com/file.m4a", "square")
+
+    @patch('api._download_and_pipeline')
+    def test_none_project_id_passed_when_omitted(self, mock_pipeline):
+        """project_id defaults to None when not provided."""
+        mock_pipeline.return_value = self._make_process_response()
+        body = UrlRequest(url="https://example.com/file.m4a")
+
+        process_url(body, _="test-key")
+
+        mock_pipeline.assert_called_once_with("https://example.com/file.m4a", None)
+
+
+class TestProcessIdProjectId(unittest.TestCase):
+    """Tests for project_id handling through /process/id."""
+
+    def _make_process_response(self):
+        return ProcessResponse(file_name="session", segments=[(0.0, 1.5)], segment_count=1)
+
+    @patch('api._download_and_pipeline')
+    @patch('api._downloader')
+    def test_project_id_passed_to_pipeline(self, mock_downloader, mock_pipeline):
+        """project_id from request body is forwarded to _download_and_pipeline."""
+        mock_downloader.input_url_base = "https://base.url/"
+        mock_pipeline.return_value = self._make_process_response()
+        body = IdRequest(file_id="abc123", project_id="triangle")
+
+        process_id(body, _="test-key")
+
+        mock_pipeline.assert_called_once_with("https://base.url/abc123", "triangle")
+
+
+class TestDownloadAndPipelineProjectId(unittest.TestCase):
+    """Tests for project_id handling in _download_and_pipeline."""
+
+    def _make_process_response(self):
+        return ProcessResponse(file_name="session_square", segments=[(0.0, 1.5)], segment_count=1)
+
+    @patch('api.PROJECT_IDS', [])
+    @patch('api._run_pipeline')
+    @patch('api._downloader')
+    @patch('api._check_media_dir')
+    def test_project_id_appended_to_session_name(self, mock_check, mock_downloader, mock_run_pipeline):
+        """project_id is appended to stem when not already present."""
+        mock_downloader.download.return_value = "/path/to/rehearsal.m4a"
+        mock_run_pipeline.return_value = self._make_process_response()
+
+        _download_and_pipeline("https://example.com/file.m4a", project_id="square")
+
+        mock_run_pipeline.assert_called_once_with(Path("/path/to/rehearsal.m4a"), "rehearsal_square")
+
+    @patch('api.PROJECT_IDS', [])
+    @patch('api._run_pipeline')
+    @patch('api._downloader')
+    @patch('api._check_media_dir')
+    def test_project_id_not_duplicated_when_in_filename(self, mock_check, mock_downloader, mock_run_pipeline):
+        """project_id already in filename — session name not modified."""
+        mock_downloader.download.return_value = "/path/to/square_rehearsal.m4a"
+        mock_run_pipeline.return_value = self._make_process_response()
+
+        _download_and_pipeline("https://example.com/file.m4a", project_id="square")
+
+        mock_run_pipeline.assert_called_once_with(Path("/path/to/square_rehearsal.m4a"), "square_rehearsal")
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    @patch('api._downloader')
+    @patch('api._check_media_dir')
+    def test_conflicting_project_id_in_filename_raises_400(self, mock_check, mock_downloader):
+        """400 raised when downloaded filename contains a different configured project_id."""
+        mock_downloader.download.return_value = "/path/to/triangle_rehearsal.m4a"
+
+        with self.assertRaises(HTTPException) as ctx:
+            _download_and_pipeline("https://example.com/file.m4a", project_id="square")
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("conflicts with requested project id", ctx.exception.detail)
+
+
+class TestProcessUploadProjectId(unittest.TestCase):
+    """Tests for project_id handling through /process/upload."""
+
+    def _make_process_response(self):
+        return ProcessResponse(file_name="recording", segments=[(0.0, 2.0)], segment_count=1)
+
+    def _make_mock_file(self, filename, content=b"fake m4a content"):
+        mock_file = MagicMock()
+        mock_file.filename = filename
+        mock_file.read = AsyncMock(return_value=content)
+        return mock_file
+
+    def _run_upload(self, mock_file, project_id=None):
+        return asyncio.run(process_upload(file=mock_file, project_id=project_id, _="test-key"))
+
+    @patch('api.PROJECT_IDS', [])
+    @patch('api._run_pipeline')
+    @patch('api._check_media_dir')
+    @patch('api.uuid')
+    @patch('api.MEDIA_DIR')
+    def test_project_id_appended_to_stem(self, mock_media_dir, mock_uuid, mock_check, mock_run_pipeline):
+        """project_id is appended to the file stem when not already present."""
+        mock_uuid.uuid4.return_value = MagicMock(hex="deadbeef12345678")
+        mock_m4a_path = MagicMock(spec=Path)
+        mock_media_dir.__truediv__.return_value = mock_m4a_path
+        mock_run_pipeline.return_value = self._make_process_response()
+
+        self._run_upload(self._make_mock_file("rehearsal.m4a"), project_id="square")
+
+        mock_run_pipeline.assert_called_once_with(mock_m4a_path, "rehearsal_square")
+
+    @patch('api.PROJECT_IDS', [])
+    @patch('api._run_pipeline')
+    @patch('api._check_media_dir')
+    @patch('api.uuid')
+    @patch('api.MEDIA_DIR')
+    def test_project_id_not_duplicated_when_in_filename(self, mock_media_dir, mock_uuid, mock_check, mock_run_pipeline):
+        """project_id already in filename — stem not modified."""
+        mock_uuid.uuid4.return_value = MagicMock(hex="deadbeef12345678")
+        mock_m4a_path = MagicMock(spec=Path)
+        mock_media_dir.__truediv__.return_value = mock_m4a_path
+        mock_run_pipeline.return_value = self._make_process_response()
+
+        self._run_upload(self._make_mock_file("square_rehearsal.m4a"), project_id="square")
+
+        mock_run_pipeline.assert_called_once_with(mock_m4a_path, "square_rehearsal")
+
+    @patch('api.PROJECT_IDS', ["square", "triangle"])
+    @patch('api._check_media_dir')
+    def test_conflicting_project_id_raises_400(self, mock_check):
+        """400 raised when uploaded filename contains a different configured project_id."""
+        with self.assertRaises(HTTPException) as ctx:
+            self._run_upload(self._make_mock_file("triangle_rehearsal.m4a"), project_id="square")
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("conflicts with requested project id", ctx.exception.detail)
+
+    @patch('api.PROJECT_IDS', [])
+    @patch('api._run_pipeline')
+    @patch('api._check_media_dir')
+    @patch('api.uuid')
+    @patch('api.MEDIA_DIR')
+    def test_no_project_id_session_name_unchanged(self, mock_media_dir, mock_uuid, mock_check, mock_run_pipeline):
+        """No project_id — session name derived from filename as before."""
+        mock_uuid.uuid4.return_value = MagicMock(hex="deadbeef12345678")
+        mock_m4a_path = MagicMock(spec=Path)
+        mock_media_dir.__truediv__.return_value = mock_m4a_path
+        mock_run_pipeline.return_value = self._make_process_response()
+
+        self._run_upload(self._make_mock_file("rehearsal.m4a"))
+
+        mock_run_pipeline.assert_called_once_with(mock_m4a_path, "rehearsal")
 
 
 if __name__ == "__main__":
