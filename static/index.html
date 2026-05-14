@@ -583,7 +583,7 @@
       try {
         const res = await fetch('/health');
         if (res.ok) {
-          el.textContent = '✅ Server reachable';
+          el.textContent = '✅ Server healthy';
           el.className = 'ok';
         } else {
           el.textContent = `❌ Server error (${res.status})`;
