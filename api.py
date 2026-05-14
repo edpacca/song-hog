@@ -7,7 +7,7 @@ matplotlib.use("Agg")  # headless, no display required
 
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -63,10 +63,32 @@ class ProcessResponse(BaseModel):
 
 class UrlRequest(BaseModel):
     url: str
+    project_id: str | None = None
 
 
 class IdRequest(BaseModel):
     file_id: str
+    project_id: str | None = None
+
+
+@app.get("/project-ids")
+def get_project_ids():
+    return {"project_ids": PROJECT_IDS}
+
+
+def _apply_project_id(session_name: str, project_id: str | None) -> str:
+    session = session_name.lower()
+    if project_id is not None:
+        for pid in PROJECT_IDS:
+            existing_project_id = pid.lower()
+            if existing_project_id != project_id.lower() and existing_project_id in session:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File name contains project id '{pid}' which conflicts with requested project id '{project_id}'",
+                )
+    if project_id and project_id.lower() not in session:
+        return f"{session_name}_{project_id}"
+    return session_name
 
 
 def _check_media_dir() -> None:
@@ -118,6 +140,9 @@ def _create_session_dir(session_name: str) -> Path:
 
 
 ENABLE_PLOT = os.getenv("ENABLE_PLOT", "0") == "1"
+PROJECT_IDS: list[str] = [
+    p.strip() for p in os.getenv("PROJECT_IDS", "").split(",") if p.strip()
+]
 
 
 def _convert_and_analyse(m4a_path: Path, session_name: str, outdir: Path):
@@ -172,7 +197,7 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
         segment_count=len(segments),
     )
 
-def _download_and_pipeline(url: str) -> ProcessResponse:
+def _download_and_pipeline(url: str, project_id: str | None = None) -> ProcessResponse:
     """Download an M4A from `url` into MEDIA_DIR and run the processing pipeline."""
     _check_media_dir()
     try:
@@ -182,6 +207,7 @@ def _download_and_pipeline(url: str) -> ProcessResponse:
 
     m4a_path = Path(downloaded)
     session_name = m4a_path.stem.replace(" ", "_")
+    session_name = _apply_project_id(session_name, project_id)
     return _run_pipeline(m4a_path, session_name)
 
 
@@ -189,7 +215,7 @@ def _download_and_pipeline(url: str) -> ProcessResponse:
 def process_url(body: UrlRequest, _: str = Depends(get_api_key)):
     """Download and process a recording by URL."""
     logger.info("POST /process/url url=%s", body.url)
-    return _download_and_pipeline(body.url)
+    return _download_and_pipeline(body.url, body.project_id)
 
 
 @app.post("/process/id", response_model=ProcessResponse)
@@ -197,12 +223,13 @@ def process_id(body: IdRequest, _: str = Depends(get_api_key)):
     """Download and process a recording by file ID."""
     logger.info("POST /process/id file_id=%s", body.file_id)
     url = f"{_downloader.input_url_base}{body.file_id}"
-    return _download_and_pipeline(url)
+    return _download_and_pipeline(url, body.project_id)
 
 
 @app.post("/process/upload", response_model=ProcessResponse)
 async def process_upload(
     file: UploadFile = File(...),
+    project_id: str | None = Form(default=None),
     _: str = Depends(get_api_key),
 ):
     """Upload an M4A file directly and process it."""
@@ -211,8 +238,9 @@ async def process_upload(
         raise HTTPException(status_code=400, detail="Only .m4a files are accepted")
 
     _check_media_dir()
-    stem = Path(file.filename).stem.replace(" ", "_")
-    m4a_path = MEDIA_DIR / f"{stem}_{uuid.uuid4().hex[:8]}.m4a"
+    session_name = Path(file.filename).stem.replace(" ", "_")
+    session_name = _apply_project_id(session_name, project_id)
+    m4a_path = MEDIA_DIR / f"{session_name}_{uuid.uuid4().hex[:8]}.m4a"
 
     try:
         content = await file.read()
@@ -220,4 +248,4 @@ async def process_upload(
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {exc}")
 
-    return _run_pipeline(m4a_path, stem)
+    return _run_pipeline(m4a_path, session_name)

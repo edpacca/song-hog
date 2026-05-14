@@ -285,6 +285,41 @@
       border-color: var(--accent);
       color: var(--text);
     }
+
+    /* Project ID radio group */
+    #project-id-card { display: none; }
+
+    .radio-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      padding: 8px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .radio-group input[type="radio"] {
+      display: inline;
+      width: auto;
+      min-height: auto;
+      accent-color: var(--accent);
+    }
+
+    .radio-group label:has(input:checked) {
+      border-color: var(--accent);
+    }
   </style>
 </head>
 <body>
@@ -306,6 +341,12 @@
       <input type="password" id="api-key-input" placeholder="Paste your API key" autocomplete="off" spellcheck="false">
     </div>
     <button class="btn" id="save-key-btn" onclick="saveKey()">Save Key</button>
+  </div>
+
+  <!-- Project ID card (shown only when PROJECT_IDS configured) -->
+  <div class="card" id="project-id-card">
+    <h2>Project</h2>
+    <div class="radio-group" id="project-id-radios"></div>
   </div>
 
   <!-- Process card -->
@@ -532,13 +573,13 @@
     function submitUrl() {
       const url = document.getElementById('url-input').value.trim();
       if (!url) { showResult(null, 'Please enter a URL.'); return; }
-      callApi('/process/url', { url }, 'url-btn');
+      callApi('/process/url', { url, project_id: selectedProjectId() }, 'url-btn');
     }
 
     function submitId() {
       const file_id = document.getElementById('id-input').value.trim();
       if (!file_id) { showResult(null, 'Please enter a file ID.'); return; }
-      callApi('/process/id', { file_id }, 'id-btn');
+      callApi('/process/id', { file_id, project_id: selectedProjectId() }, 'id-btn');
     }
 
     async function submitUpload() {
@@ -553,6 +594,8 @@
 
       const form = new FormData();
       form.append('file', input.files[0]);
+      const pid = selectedProjectId();
+      if (pid) form.append('project_id', pid);
 
       try {
         const res = await fetch('/process/upload', {
@@ -573,6 +616,33 @@
       } finally {
         setLoading('upload-btn', false);
       }
+    }
+
+    // -----------------------------------------------------------------------
+    // Project IDs
+    // -----------------------------------------------------------------------
+    async function loadProjectIds() {
+      try {
+        const res = await fetch('/project-ids');
+        if (!res.ok) return;
+        const { project_ids } = await res.json();
+        if (!project_ids || project_ids.length === 0) return;
+
+        const container = document.getElementById('project-id-radios');
+        const noneOption = `<label><input type="radio" name="project_id" value="" checked> None</label>`;
+        const pidOptions = project_ids.map(pid => `
+          <label>
+            <input type="radio" name="project_id" value="${escHtml(pid)}">
+            ${escHtml(pid)}
+          </label>`).join('');
+        container.innerHTML = noneOption + pidOptions;
+        document.getElementById('project-id-card').style.display = 'block';
+      } catch { /* server may not be running yet */ }
+    }
+
+    function selectedProjectId() {
+      const el = document.querySelector('input[name="project_id"]:checked');
+      return el?.value || null;
     }
 
     // -----------------------------------------------------------------------
@@ -600,6 +670,7 @@
     // -----------------------------------------------------------------------
     loadKey();
     checkHealth();
+    loadProjectIds();
   </script>
 
 </body>
