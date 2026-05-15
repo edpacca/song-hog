@@ -1,7 +1,19 @@
+<img
+    src="./static/song-hog_logo.svg"
+    style="
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 30%;
+    "
+    />
+
 # Song Hog
 Song hog snuffles through recordings to find the bits that matter.
 An algorithm to identify and chop songs out from long recordings. Designed to help with extracting and reviewing demos from long recordings of band rehearsals.
-The API harness is fairly specifically tailored to my use-case with Ggl recordings, but it could easily be adapted or just run locally.
+The API harness is fairly specifically tailored to my use-case with Ggl recordings, but the downloader can easily be adapted, or just run directly against local files.
+
+*A note: This worked well with recordings where the playing volume is quite loud, i.e. live bands - I am developing another processing stage to try to identify quieter intros and outros for songs. For now increasing the 'padding' works, but we can do better!*
 
 ![Example output plot from an hour long recording](./static/example_plot.png)
 
