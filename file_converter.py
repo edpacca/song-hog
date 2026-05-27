@@ -80,6 +80,32 @@ def extract_m4a_segments(m4a_path: str, t_segments: Sequence[tuple[float, float]
     return paths
 
 
+def extract_m4a_segments_as_mp3s(m4a_path: str, t_segments: Sequence[tuple[float, float]], output_dir: str, base_name: str) -> list[str]:
+    """Extract time-bounded segments from an M4A file and encode directly to MP3.
+
+    Combines extraction and MP3 encoding into a single ffmpeg pass per segment,
+    avoiding the intermediate M4A files that extract_m4a_segments produces.
+    Deletes the source M4A after all segments are extracted.
+
+    Args:
+        m4a_path: Path to the source M4A file.
+        t_segments: Sequence of (start, end) time pairs in seconds.
+        output_dir: Directory where segment MP3 files will be written.
+        base_name: Base name prefix used for all output MP3 files.
+
+    Returns:
+        List of paths to the created MP3 files.
+    """
+    output_dirpath = Path(output_dir)
+    paths = []
+    for i, (start, end) in enumerate(t_segments):
+        out_path = output_dirpath / f"{base_name}_segment_{i:02d}.mp3"
+        logger.info(f"Extracting segment {i:02d}: {start}s -> {end}s to {out_path}")
+        _run_ffmpeg(ffmpeg.input(m4a_path, ss=start, to=end).output(str(out_path)))
+        paths.append(str(out_path))
+    return paths
+
+
 def convert_m4as_to_mp3s(m4a_paths: list[str], output_dir: str, base_name: str) -> list[str]:
     """Convert a list of M4A segment files to MP3 files, removing the originals.
 

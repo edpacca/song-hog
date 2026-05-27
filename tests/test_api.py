@@ -66,7 +66,7 @@ class TestRunPipeline(unittest.TestCase):
         self.assertIn(message_substring, ctx.exception.detail)
 
     @patch('api._enqueue')
-    @patch('api.file_converter.extract_m4a_segments')
+    @patch('api.file_converter.extract_m4a_segments_as_mp3s')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
     @patch('api.file_converter.read_wav_as_float')
@@ -198,7 +198,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_plot.assert_not_called()
 
     @patch('api.ENABLE_PLOT', "1")
-    @patch('api.file_converter.extract_m4a_segments')
+    @patch('api.file_converter.extract_m4a_segments_as_mp3s')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
     @patch('api.file_converter.read_wav_as_float')
@@ -228,7 +228,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_extract.assert_not_called()
 
     @patch('api._enqueue')
-    @patch('api.file_converter.extract_m4a_segments')
+    @patch('api.file_converter.extract_m4a_segments_as_mp3s')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
     @patch('api.file_converter.read_wav_as_float')
@@ -259,7 +259,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_enqueue.assert_not_called()
 
     @patch('api._enqueue')
-    @patch('api.file_converter.extract_m4a_segments')
+    @patch('api.file_converter.extract_m4a_segments_as_mp3s')
     @patch('api.plot.plot_data')
     @patch('api.process.analyse')
     @patch('api.file_converter.read_wav_as_float')
