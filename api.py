@@ -167,14 +167,6 @@ def _plot_and_segment(analysis, data, session_name: str, outdir: Path) -> list:
     return segments
 
 
-def _extract_audio_segments(m4a_path: Path, segments, outdir: Path, session_name: str) -> list[str]:
-    try:
-        return file_converter.extract_m4a_segments(str(m4a_path), segments, str(outdir))
-    except Exception as exc:
-        logger.exception("Segment extraction failed: session=%s", session_name)
-        raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
-
-
 def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     logger.info("Pipeline start: session=%s m4a=%s", session_name, m4a_path)
     outdir = _create_session_dir(session_name)
@@ -182,12 +174,11 @@ def _run_pipeline(m4a_path: Path, session_name: str) -> ProcessResponse:
     segments = _plot_and_segment(analysis, data, session_name, outdir)
     del data, analysis
     _cleanup_intermediate_files(wav_path, session_name=session_name)
-    segment_paths = _extract_audio_segments(m4a_path, segments, outdir, session_name)
     try:
-        file_converter.convert_m4as_to_mp3s(segment_paths, str(outdir), session_name)
+        file_converter.extract_m4a_segments_as_mp3s(str(m4a_path), segments, str(outdir), session_name)
     except Exception as exc:
-        logger.exception("MP3 conversion failed: session=%s", session_name)
-        raise HTTPException(status_code=500, detail=f"MP3 conversion failed: {exc}")
+        logger.exception("Segment extraction failed: session=%s", session_name)
+        raise HTTPException(status_code=500, detail=f"Audio segment extraction failed: {exc}")
     _cleanup_intermediate_files(m4a_path, session_name=session_name)
     _enqueue(session_name, outdir)
     logger.info("Pipeline complete: session=%s segments=%d", session_name, len(segments))
